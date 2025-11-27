@@ -674,7 +674,11 @@ function init_gerencianet_assinaturas_pix()
 
 		public function successful_webhook_cob($posted)
 		{
-			$pixs = json_decode($posted, true)['pix'];
+			$data = json_decode( $posted, true );
+			$pixs = $data['pix'] ?? [];
+			if ( empty( $pixs ) ) {
+				exit();
+			}
 
 			foreach ($pixs as $pix) {
 				// Percorre lista de notificações
@@ -716,7 +720,13 @@ function init_gerencianet_assinaturas_pix()
 
 		public function successful_webhook_cobr($posted)
 		{
-			$cobsr = json_decode($posted, true)['cobsr'];
+			$data = json_decode($posted, true);
+
+			// Garante que cobsr exista e seja array
+			$cobsr = $data['cobsr'] ?? [];
+			if (empty($cobsr) || !is_array($cobsr)) {
+				exit();
+			}
 
 			foreach ($cobsr as $cobr) {
 				// Busca pedidos por idRec
@@ -857,7 +867,13 @@ function init_gerencianet_assinaturas_pix()
 
 		public function successful_webhook_rec($posted)
 		{
-			$recs = json_decode($posted, true)['recs'];
+			$data = json_decode($posted, true);
+
+			// Garante que recs exista e seja array
+			$recs = $data['recs'] ?? [];
+			if (empty($recs) || !is_array($recs)) {
+				exit();
+			}
 
 			foreach ($recs as $rec) {
 				// Busca pedidos por idRec

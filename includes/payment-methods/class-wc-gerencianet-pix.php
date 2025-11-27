@@ -512,7 +512,12 @@ function init_gerencianet_pix() {
 		}
 
 		public function successful_webhook( $posted ) {
-			$pix = json_decode( $posted, true )['pix'];
+			$data = json_decode( $posted, true );
+			$pix = $data['pix'] ?? [];
+			if ( empty( $pix ) ) {
+				exit();
+			}
+			
 			// Percorre lista de notificações
 			$args = array(
 				'limit'        => -1,
