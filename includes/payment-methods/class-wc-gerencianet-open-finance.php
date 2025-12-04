@@ -206,6 +206,14 @@ function init_gerencianet_open_finance() {
 					'description' => __( 'Por favor, insira seu Client_Secret de Homologação. Isso é necessário para testar os pagamentos.', Gerencianet_I18n::getTextDomain() ),
 					'default'     => '',
 				),
+				'gn_hmac'                   => array(
+					'title'       => __( 'HMAC do Webhook', Gerencianet_I18n::getTextDomain() ),
+					'type'        => 'text',
+					'description' => __( 'Insira o HMAC que será usado no webhook.', Gerencianet_I18n::getTextDomain() ),
+					'desc_tip'    => false,
+					'placeholder' => '',
+					'default'     => $this->generate_hmac(),
+				),
 				'gn_certificate_file'    => array(
 					'title'       => __( 'Certificado Open Finance', Gerencianet_I18n::getTextDomain() ),
 					'type'        => 'file',
@@ -284,6 +292,18 @@ function init_gerencianet_open_finance() {
 					),
 				),
 			);
+		}
+
+		private function generate_hmac() {
+
+			$client_secret = $this->gn_sandbox === 'yes'
+				? $this->get_option( 'gn_client_secret_homologation' )
+				: $this->get_option( 'gn_client_secret_production' );
+			$ip_address   = $_SERVER['SERVER_ADDR'] ?? '127.0.0.1';
+			$last_8_chars = substr( $client_secret, -8 );
+			$expected_hmac = hash( 'sha256', $last_8_chars . $ip_address );
+
+			return $expected_hmac;
 		}
 
 		public function payment_fields() {
@@ -443,15 +463,7 @@ function init_gerencianet_open_finance() {
 			if(isset($_GET['hmac'])) {
 				$received_hmac = $_GET['hmac'];
 
-				// Determina se está em ambiente de homologação ou produção
-				$client_secret = $this->gn_sandbox === 'yes'
-					? $this->get_option( 'gn_client_secret_homologation' )
-					: $this->get_option( 'gn_client_secret_production' );
-
-				// Gera o HMAC esperado (últimos 8 caracteres do segredo + IP do servidor)
-				$ip_address   = $_SERVER['SERVER_ADDR'] ?? '127.0.0.1';
-				$last_8_chars = substr( $client_secret, -8 );
-				$expected_hmac = hash( 'sha256', $last_8_chars . $ip_address );
+				$expected_hmac = $this->get_option('gn_hmac');
 
 				// Valida o HMAC
 				if ( hash_equals( $expected_hmac, $received_hmac ) ) {

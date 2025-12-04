@@ -40,6 +40,26 @@ class Gerencianet_Integration
 
 
 
+	public function get_hmac($paymentMethod) {
+
+		$wcSettings = maybe_unserialize(get_option('woocommerce_' . $paymentMethod . '_settings'));
+
+		$hmac = $wcSettings['gn_hmac'];
+
+		if (empty($hmac)) {
+
+			$credentials = $this->get_credentials($paymentMethod);
+			$client_secret = $credentials['client_secret'];
+			$server_ip     = $_SERVER['SERVER_ADDR'] ?? '127.0.0.1';
+			$last_8_chars = substr($client_secret, -8);
+			$hmac_input   = $last_8_chars . $server_ip;
+			$hmac         = hash('sha256', $hmac_input);
+
+		}
+
+		return $hmac;
+	}
+
 	public function get_credentials($paymentMethod)
 	{
 		$wcSettings = maybe_unserialize(get_option('woocommerce_' . $paymentMethod . '_settings'));
@@ -306,19 +326,10 @@ class Gerencianet_Integration
 		$credentials = $this->get_credentials(GERENCIANET_PIX_ID);
 
 		try {
-			// 1. Recupera os dados necessários
-			$client_secret = $credentials['client_secret'];
-			$server_ip     = $_SERVER['SERVER_ADDR'] ?? '127.0.0.1';
+			$hmac = $this->get_hmac(GERENCIANET_PIX_ID);
 
-
-			$last_8_chars = substr($client_secret, -8);
-			$hmac_input   = $last_8_chars . $server_ip;
-			$hmac         = hash('sha256', $hmac_input);
-
-			// 3. Constrói a URL com o hmac
 			$webhook_url  = strval($url) . '?hmac=' . $hmac . '&ignore=';
 
-			// 4. Envia a requisição para configurar o webhook
 			$api  = new Gerencianet($credentials);
 			$body = array('webhookUrl' => $webhook_url);
 			$data = $api->pixConfigWebhook($params, $body);
@@ -355,14 +366,9 @@ class Gerencianet_Integration
 
 		try {
 			/**
-			 * 1. Gera o HMAC no formato que você usa hoje
+			 * 1. Obtém o HMAC para autenticação nas URLs de webhook
 			 */
-			$client_secret = $credentials['client_secret'];
-			$server_ip     = $_SERVER['SERVER_ADDR'] ?? '127.0.0.1';
-
-			$last_8_chars = substr($client_secret, -8);
-			$hmac_input   = $last_8_chars . $server_ip;
-			$hmac         = hash('sha256', $hmac_input);
+			$hmac = $this->get_hmac(GERENCIANET_ASSINATURAS_PIX_ID);
 
 			/**
 			 * 2. Monta URLs com ?hmac=...&type=...&ignore= para cada chamada
@@ -881,13 +887,7 @@ class Gerencianet_Integration
 
 		try {
 			$credentials = $this->get_credentials(GERENCIANET_OPEN_FINANCE_ID);
-			$server_ip   = $_SERVER['SERVER_ADDR'] ?? '127.0.0.1';
-			$client_secret = $credentials['client_secret'];
-
-			// Gera o HMAC seguro
-			$last_8_chars = substr($client_secret, -8);
-			$hmac_input   = $last_8_chars . $server_ip;
-			$hmac         = hash('sha256', $hmac_input);
+			$hmac = $this->get_hmac(GERENCIANET_OPEN_FINANCE_ID);
 
 			// Monta o corpo da requisição
 			$api  = new Gerencianet($credentials);
