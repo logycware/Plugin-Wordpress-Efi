@@ -504,6 +504,30 @@ class Gerencianet_Integration
 		return self::result_api(GERENCIANET_ASSINATURAS_PIX_ID, $data, $response);
 	}
 
+	public function retry_pix_automatic_charge($txid, $date)
+	{
+		$response = false;
+		$params = array(
+			'txid' => $txid,
+			'data' => $date,
+		);
+
+		try {
+			$api      = new Gerencianet($this->get_credentials(GERENCIANET_ASSINATURAS_PIX_ID));
+			$data     = $api->pixRetryRequestAutomaticCharge($params);
+			$response = true;
+		} catch (GerencianetException $e) {
+			$data = array(
+				'code'    => $e->getCode(),
+				'error'   => $e->error,
+				'message' => $e->errorDescription,
+			);
+		} catch (Exception $e) {
+			$data = array('message' => $e->getMessage());
+		}
+		return self::result_api(GERENCIANET_ASSINATURAS_PIX_ID, $data, $response);
+	}
+
 	public function one_step_card($order_id, $items, $shipping, $notification_url, $customer, $paymentToken, $installments, $billingAddress, $discount = false)
 	{
 		$body = array(
@@ -650,7 +674,7 @@ class Gerencianet_Integration
 			try {
 				$api = new Gerencianet($this->get_credentials($paymentMethod));
 				$pix = $api->pixDevolution($params, $body);
-				$order->update_status('refund');
+				$order->update_status('refunded');
 
 				return self::result_api($paymentMethod, true, true);
 			} catch (Exception $e) {
@@ -688,7 +712,7 @@ class Gerencianet_Integration
 		try {
 			$api = new Gerencianet($this->get_credentials(GERENCIANET_CARTAO_ID));
 			$card = $api->refundCard($params, $body);
-			$order->update_status('refund');
+			$order->update_status('refunded');
 
 			return self::result_api(GERENCIANET_CARTAO_ID, true, true);
 		} catch (Exception $e) {

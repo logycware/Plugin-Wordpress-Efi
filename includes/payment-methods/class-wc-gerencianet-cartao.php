@@ -68,7 +68,7 @@ function init_gerencianet_cartao() {
 			try {
 				$res   = $this->gerencianetSDK->card_refund( $order_id, $amount );
 				$order = wc_get_order( $order_id );
-				$order->update_status( 'refund' );
+				$order->update_status( 'refunded' );
 				return $res;
 			} catch ( Error $e ) {
 				throw $e;
@@ -447,7 +447,7 @@ function init_gerencianet_cartao() {
 
 							break;
 						case 'refunded':
-							$order->update_status( 'refund' );
+							$order->update_status( 'refunded' );
 							break;
 						case 'contested':
 							$order->update_status( 'failed' );

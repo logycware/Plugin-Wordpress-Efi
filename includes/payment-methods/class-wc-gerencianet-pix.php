@@ -79,7 +79,7 @@ function init_gerencianet_pix() {
 			try {
 				$res   = $this->gerencianetSDK->pix_refund( $order_id, $amount );
 				$order = wc_get_order( $order_id );
-				$order->update_status( 'refund' );
+				$order->update_status( 'refunded' );
 				return $res;
 			} catch ( Error $e ) {
 				throw $e;
@@ -199,7 +199,7 @@ function init_gerencianet_pix() {
 				'gn_hmac'                   => array(
 					'title'       => __( 'HMAC do Webhook', Gerencianet_I18n::getTextDomain() ),
 					'type'        => 'text',
-					'description' => __( 'Insira o HMAC que será usado no webhook.', Gerencianet_I18n::getTextDomain() ) . ' <button class="button" id="generate_hmac_button">Gerar HMAC</button>',
+					'description' => __( 'Insira o HMAC que será usado no webhook.', Gerencianet_I18n::getTextDomain() ),
 					'desc_tip'    => false,
 					'placeholder' => '',
 					'default'     => $this->generate_hmac(),
@@ -550,7 +550,7 @@ function init_gerencianet_pix() {
 					Gerencianet_Hpos::update_meta( intval( $order->get_id() ), '_gn_pix_E2EID', $pix[0]['endToEndId'], true );
 
 					if ( isset( $pix[0]['devolucoes'] ) && $pix[0]['devolucoes'][0]['status'] == 'DEVOLVIDO' ) {
-						$order->update_status( 'refund' );
+						$order->update_status( 'refunded' );
 					} else {
 						$order->update_status($this->gn_order_status_after_payment);
 						$order->payment_complete();

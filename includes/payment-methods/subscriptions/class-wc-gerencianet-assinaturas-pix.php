@@ -719,7 +719,7 @@ function init_gerencianet_assinaturas_pix()
 						Gerencianet_Hpos::update_meta(intval($order->get_id()), '_gn_pix_E2EID_0_paid_at', $dataPagamentoFormatada, true);
 
 						if (isset($pix['devolucoes']) && $pix['devolucoes'][0]['status'] == 'DEVOLVIDO') {
-							// $order->update_status('refund'); // Implementação futura de reembolso
+							// $order->update_status('refunded'); // Implementação futura de reembolso
 						} else {
 							$order->update_status($this->gn_order_status_after_payment);
 							$order->payment_complete();
@@ -763,6 +763,10 @@ function init_gerencianet_assinaturas_pix()
 					) {
 
 						if ($cobr['status'] == 'CONCLUIDA') {
+
+							if (!empty($cobr['txid'])) {
+								gn_efi_update_pix_rejected_charge_status($order_id, $cobr['txid'], 'CONCLUIDA');
+							}
 
 
 
@@ -832,7 +836,7 @@ function init_gerencianet_assinaturas_pix()
 								}
 
 								// Data do proximo pedido
-								gn_log('Próxima data de vencimento: ' . $dataDeVencimento->format('Y-m-d'), GERENCIANET_ASSINATURAS_PIX_ID);
+								// gn_log('Próxima data de vencimento: ' . $dataDeVencimento->format('Y-m-d'), GERENCIANET_ASSINATURAS_PIX_ID);
 
 								$valor = array(
 									'original' => sprintf('%0.2f', $pixValor),
@@ -858,16 +862,30 @@ function init_gerencianet_assinaturas_pix()
 								$repsonse = $this->gerencianetSDK->generate_cobr_to_pix_rec($bodyCobr);
 								$cobrResponse = json_decode($repsonse, true);
 							}
-						} else if ($cobr['status'] !== 'CRIADA' && $cobr['status'] !== 'ATIVA') {
+						} 
+						
+						if ($cobr['status'] == 'CANCELADA') {
+							if (!empty($cobr['txid'])) {
+								gn_efi_update_pix_rejected_charge_status($order_id, $cobr['txid'], 'CANCELADA');
+							}
+							$order->update_status('cancelled');
+						}
+
+						if ($cobr['status'] == 'REJEITADA') {
+							gn_efi_register_pix_rejected_charge($order_id, $cobr);
 							$order->update_status('failed');
 						}
+						
+						// else if ($cobr['status'] !== 'CRIADA' && $cobr['status'] !== 'ATIVA') {
+						// 	$order->update_status('failed');
+						// }
 
 
 
 						// Atualiza status do pedido caso tenha devolução
 						// Ainda não há webhook para devoluções em cobr
 						// if ( isset( $cobr['pix']['devolucoes'] ) && $cobr['pix']['devolucoes'][0]['status'] === 'DEVOLVIDO' ) {
-						// 	$order->update_status( 'refund' );
+						// 	$order->update_status( 'refunded' );
 						// } else {
 						// }
 					}

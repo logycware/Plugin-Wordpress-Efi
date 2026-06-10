@@ -118,6 +118,58 @@ if ($repeats > 1 && $meses_por_ciclo > 0) {
                         <?php
                         }
                     }
+
+                    $rejected_charges = gn_efi_get_pix_rejected_charges($order_id);
+                    uasort($rejected_charges, function ($a, $b) {
+                        return strcmp($a['liquidation_date'] ?? '', $b['liquidation_date'] ?? '');
+                    });
+
+                    foreach ($rejected_charges as $charge) {
+                        if (isset($charge['status']) && $charge['status'] === 'CONCLUIDA') {
+                            continue;
+                        }
+
+                        $charge_date = !empty($charge['liquidation_date']) ? $charge['liquidation_date'] : ($charge['first_rejected_at'] ?? current_time('Y-m-d'));
+                        $data_obj = new DateTime($charge_date);
+                        $mes_formatado = ucfirst($formatter->format($data_obj));
+                        $valor_pix = Gerencianet_Hpos::get_meta($order_id, '_gn_pix_valor', true);
+                        $valor_cobranca = $valor_pix !== '' ? (float) $valor_pix : (float) $valor_total;
+                        $retry_count = isset($charge['retry_count']) ? intval($charge['retry_count']) : 0;
+                        $rejected_at_label = !empty($charge['last_rejected_at']) ? ' em ' . date('d/m/Y', strtotime($charge['last_rejected_at'])) : '';
+                        if (!empty($charge['pending_retry'])) {
+                            $status_cobranca = 'Retentativa solicitada';
+                        } elseif (isset($charge['status']) && $charge['status'] === 'CANCELADA') {
+                            $status_cobranca = 'Cancelada';
+                        } else {
+                            $status_cobranca = 'Rejeitada' . $rejected_at_label . ' (' . $retry_count . '/3 retentativas)';
+                        }
+                        ?>
+                            <tr>
+                                <td style="text-align: center;"><?php echo sanitize_text_field($mes_formatado); ?></td>
+                                <td style="text-align: center;"><?php echo sanitize_text_field($status_cobranca); ?></td>
+                                <td style="text-align: center;"><?php echo sanitize_text_field('R$ ' . number_format($valor_cobranca, 2, ',', '.')); ?></td>
+                                <td style="text-align: center;">---</td>
+                                <td style="text-align: center;">
+                                    <?php
+                                    if (gn_efi_can_retry_pix_charge($charge)) {
+                                        ?>
+                                        <button
+                                            type="button"
+                                            class="btn-efi"
+                                            onclick="retryPixSubscriptionCharge('<?php echo esc_js($charge['txid']); ?>', '<?php echo esc_js(gn_efi_pix_retry_min_date()); ?>', '<?php echo esc_js(gn_efi_pix_retry_max_date($charge)); ?>')">
+                                            Retentar cobrança
+                                        </button>
+                                        <?php
+                                    } elseif (!empty($charge['pending_retry']) && !empty($charge['last_retry_date'])) {
+                                        echo 'Retentativa agendada para ' . sanitize_text_field(date('d/m/Y', strtotime($charge['last_retry_date'])));
+                                    } else {
+                                        echo "Sem ações disponíveis";
+                                    }
+                                    ?>
+                                </td>
+                            </tr>
+                        <?php
+                    }
                 } else {
                     if (isset($notification->data)) {
                         foreach ($notification->data as $notification_data) {

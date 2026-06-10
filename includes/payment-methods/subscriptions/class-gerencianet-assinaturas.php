@@ -13,6 +13,8 @@ class Gerencianet_Assinaturas
         add_action('admin_enqueue_scripts', array($this, 'load_cancel_script'));
         add_action('wp_ajax_woocommerce_gerencianet_cancel_subscription', array($this, 'woocommerce_gerencianet_cancel_subscription'));
         add_action('wp_ajax_nopriv_woocommerce_gerencianet_cancel_subscription', array($this, 'woocommerce_gerencianet_cancel_subscription'));
+        add_action('wp_ajax_woocommerce_gerencianet_retry_pix_subscription_charge', array($this, 'woocommerce_gerencianet_retry_pix_subscription_charge'));
+        add_action('wp_ajax_nopriv_woocommerce_gerencianet_retry_pix_subscription_charge', array($this, 'woocommerce_gerencianet_retry_pix_subscription_charge'));
         add_action('edit_form_after_title', array($this, 'adiciona_tag_status'));
         add_action('woocommerce_order_details_after_order_table', array($this, 'adiciona_tag_status_cliente'));
         add_action('woocommerce_order_status_cancelled', array($this, 'cancela_assinatura_efi'), 10, 1);
@@ -91,6 +93,60 @@ class Gerencianet_Assinaturas
                     $order->update_status('cancelled');
                 }
             }
+        }
+    }
+
+    public function woocommerce_gerencianet_retry_pix_subscription_charge()
+    {
+        $nonce = isset($_POST['security']) ? sanitize_text_field(wp_unslash($_POST['security'])) : '';
+        if (!wp_verify_nonce($nonce, 'woocommerce_gerencianet')) {
+            wp_send_json_error(array('message' => 'Sessão expirada. Atualize a página e tente novamente.'), 403);
+        }
+
+        $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+        $txid = isset($_POST['txid']) ? sanitize_text_field(wp_unslash($_POST['txid'])) : '';
+        $retry_date = isset($_POST['retry_date']) ? sanitize_text_field(wp_unslash($_POST['retry_date'])) : '';
+
+        if (!$order_id || empty($txid) || empty($retry_date)) {
+            wp_send_json_error(array('message' => 'Parâmetros inválidos para a retentativa.'), 400);
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            wp_send_json_error(array('message' => 'Pedido não encontrado.'), 404);
+        }
+
+        $can_manage = current_user_can('manage_woocommerce') || current_user_can('edit_shop_orders') || current_user_can('edit_post', $order_id);
+        $is_owner = get_current_user_id() && intval($order->get_customer_id()) === get_current_user_id();
+        if (!$can_manage && !$is_owner) {
+            wp_send_json_error(array('message' => 'Você não tem permissão para retentar essa cobrança.'), 403);
+        }
+
+        if ($order->get_payment_method() !== GERENCIANET_ASSINATURAS_PIX_ID) {
+            wp_send_json_error(array('message' => 'A retentativa está disponível apenas para assinaturas Pix recorrente.'), 400);
+        }
+
+        $charges = gn_efi_get_pix_rejected_charges($order_id);
+        if (!isset($charges[$txid]) || !is_array($charges[$txid])) {
+            wp_send_json_error(array('message' => 'Cobrança rejeitada não encontrada.'), 404);
+        }
+
+        $validation = gn_efi_validate_pix_retry_date($charges[$txid], $retry_date);
+        if (true !== $validation) {
+            wp_send_json_error(array('message' => $validation), 400);
+        }
+
+        try {
+            $gerencianetSDK = new Gerencianet_Integration();
+            $response = $gerencianetSDK->retry_pix_automatic_charge($txid, $retry_date);
+            $decoded_response = json_decode($response, true);
+
+            gn_efi_mark_pix_retry_requested($order_id, $txid, $retry_date, is_array($decoded_response) ? $decoded_response : $response);
+
+            wp_send_json_success(array('message' => 'Retentativa solicitada com sucesso.'));
+        } catch (Exception $e) {
+            gn_log($e, GERENCIANET_ASSINATURAS_PIX_ID);
+            wp_send_json_error(array('message' => $e->getMessage()), 400);
         }
     }
 

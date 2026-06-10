@@ -33,6 +33,274 @@ function gn_check_order_status() {
     wp_send_json_success( [ 'current_status' => $current_status ] );
 }
 
+if ( ! function_exists( 'gn_efi_get_store_timezone' ) ) {
+	function gn_efi_get_store_timezone() {
+		if ( function_exists( 'wp_timezone' ) ) {
+			return wp_timezone();
+		}
+
+		return new DateTimeZone( 'America/Sao_Paulo' );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_format_webhook_date' ) ) {
+	function gn_efi_format_webhook_date( $date_string ) {
+		try {
+			$date = new DateTime( $date_string );
+			$date->setTimezone( gn_efi_get_store_timezone() );
+			return $date->format( 'Y-m-d' );
+		} catch ( Exception $e ) {
+			return current_time( 'Y-m-d' );
+		}
+	}
+}
+
+if ( ! function_exists( 'gn_efi_get_pix_rejected_charges' ) ) {
+	function gn_efi_get_pix_rejected_charges( $order_id ) {
+		$charges = Gerencianet_Hpos::get_meta( $order_id, '_gn_pix_rejected_cobr_charges', true );
+
+		return is_array( $charges ) ? $charges : array();
+	}
+}
+
+if ( ! function_exists( 'gn_efi_save_pix_rejected_charges' ) ) {
+	function gn_efi_save_pix_rejected_charges( $order_id, $charges ) {
+		Gerencianet_Hpos::update_meta( $order_id, '_gn_pix_rejected_cobr_charges', $charges );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_extract_cobr_rejection_date' ) ) {
+	function gn_efi_extract_cobr_rejection_date( $cobr ) {
+		if ( isset( $cobr['atualizacao'] ) && is_array( $cobr['atualizacao'] ) ) {
+			foreach ( array_reverse( $cobr['atualizacao'] ) as $event ) {
+				if ( isset( $event['status'], $event['data'] ) && 'REJEITADA' === $event['status'] ) {
+					return gn_efi_format_webhook_date( $event['data'] );
+				}
+			}
+		}
+
+		if ( isset( $cobr['tentativas'] ) && is_array( $cobr['tentativas'] ) ) {
+			foreach ( array_reverse( $cobr['tentativas'] ) as $attempt ) {
+				if ( isset( $attempt['atualizacao'] ) && is_array( $attempt['atualizacao'] ) ) {
+					foreach ( array_reverse( $attempt['atualizacao'] ) as $event ) {
+						if ( isset( $event['status'], $event['data'] ) && 'REJEITADA' === $event['status'] ) {
+							return gn_efi_format_webhook_date( $event['data'] );
+						}
+					}
+				}
+			}
+		}
+
+		return current_time( 'Y-m-d' );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_extract_cobr_liquidation_date' ) ) {
+	function gn_efi_extract_cobr_liquidation_date( $cobr ) {
+		if ( isset( $cobr['tentativas'] ) && is_array( $cobr['tentativas'] ) ) {
+			foreach ( $cobr['tentativas'] as $attempt ) {
+				if ( ! empty( $attempt['dataLiquidacao'] ) ) {
+					return sanitize_text_field( $attempt['dataLiquidacao'] );
+				}
+			}
+		}
+
+		return gn_efi_extract_cobr_rejection_date( $cobr );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_extract_cobr_rejection_reason' ) ) {
+	function gn_efi_extract_cobr_rejection_reason( $cobr ) {
+		if ( isset( $cobr['encerramento']['rejeicao'] ) && is_array( $cobr['encerramento']['rejeicao'] ) ) {
+			return $cobr['encerramento']['rejeicao'];
+		}
+
+		if ( isset( $cobr['tentativas'] ) && is_array( $cobr['tentativas'] ) ) {
+			foreach ( array_reverse( $cobr['tentativas'] ) as $attempt ) {
+				if ( isset( $attempt['rejeicao'] ) && is_array( $attempt['rejeicao'] ) ) {
+					return $attempt['rejeicao'];
+				}
+			}
+		}
+
+		return array();
+	}
+}
+
+if ( ! function_exists( 'gn_efi_register_pix_rejected_charge' ) ) {
+	function gn_efi_register_pix_rejected_charge( $order_id, $cobr ) {
+		if ( empty( $cobr['txid'] ) ) {
+			return;
+		}
+
+		$txid     = sanitize_text_field( $cobr['txid'] );
+		$charges  = gn_efi_get_pix_rejected_charges( $order_id );
+		$existing = isset( $charges[ $txid ] ) && is_array( $charges[ $txid ] ) ? $charges[ $txid ] : array();
+		$reason   = gn_efi_extract_cobr_rejection_reason( $cobr );
+		$webhook_attempts_count = isset( $cobr['tentativas'] ) && is_array( $cobr['tentativas'] ) ? count( $cobr['tentativas'] ) : 0;
+		$retry_count = max(
+			isset( $existing['retry_count'] ) ? intval( $existing['retry_count'] ) : 0,
+			max( 0, $webhook_attempts_count - 1 )
+		);
+
+		$charges[ $txid ] = array_merge(
+			$existing,
+			array(
+				'txid'                   => $txid,
+				'idRec'                  => isset( $cobr['idRec'] ) ? sanitize_text_field( $cobr['idRec'] ) : '',
+				'status'                 => 'REJEITADA',
+				'first_rejected_at'      => ! empty( $existing['first_rejected_at'] ) ? $existing['first_rejected_at'] : gn_efi_extract_cobr_rejection_date( $cobr ),
+				'last_rejected_at'       => gn_efi_extract_cobr_rejection_date( $cobr ),
+				'liquidation_date'       => gn_efi_extract_cobr_liquidation_date( $cobr ),
+				'rejection_code'         => isset( $reason['codigo'] ) ? sanitize_text_field( $reason['codigo'] ) : '',
+				'rejection_description'  => isset( $reason['descricao'] ) ? sanitize_text_field( $reason['descricao'] ) : '',
+				'webhook_attempts_count' => $webhook_attempts_count,
+				'retry_count'            => $retry_count,
+				'pending_retry'          => false,
+				'updated_at'             => current_time( 'mysql' ),
+			)
+		);
+
+		gn_efi_save_pix_rejected_charges( $order_id, $charges );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_update_pix_rejected_charge_status' ) ) {
+	function gn_efi_update_pix_rejected_charge_status( $order_id, $txid, $status ) {
+		if ( empty( $txid ) ) {
+			return;
+		}
+
+		$charges = gn_efi_get_pix_rejected_charges( $order_id );
+		$txid    = sanitize_text_field( $txid );
+
+		if ( ! isset( $charges[ $txid ] ) || ! is_array( $charges[ $txid ] ) ) {
+			return;
+		}
+
+		$charges[ $txid ]['status']        = sanitize_text_field( $status );
+		$charges[ $txid ]['pending_retry'] = false;
+		$charges[ $txid ]['updated_at']    = current_time( 'mysql' );
+
+		gn_efi_save_pix_rejected_charges( $order_id, $charges );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_mark_pix_retry_requested' ) ) {
+	function gn_efi_mark_pix_retry_requested( $order_id, $txid, $retry_date, $response ) {
+		$charges = gn_efi_get_pix_rejected_charges( $order_id );
+		$txid    = sanitize_text_field( $txid );
+
+		if ( ! isset( $charges[ $txid ] ) || ! is_array( $charges[ $txid ] ) ) {
+			return;
+		}
+
+		$retry_count = isset( $charges[ $txid ]['retry_count'] ) ? intval( $charges[ $txid ]['retry_count'] ) : 0;
+		$retries     = isset( $charges[ $txid ]['retries'] ) && is_array( $charges[ $txid ]['retries'] ) ? $charges[ $txid ]['retries'] : array();
+
+		$retries[] = array(
+			'date'         => sanitize_text_field( $retry_date ),
+			'requested_at' => current_time( 'mysql' ),
+			'response'     => $response,
+		);
+
+		$charges[ $txid ]['status']          = 'RETENTATIVA_SOLICITADA';
+		$charges[ $txid ]['pending_retry']   = true;
+		$charges[ $txid ]['retry_count']     = $retry_count + 1;
+		$charges[ $txid ]['last_retry_date'] = sanitize_text_field( $retry_date );
+		$charges[ $txid ]['retries']         = $retries;
+		$charges[ $txid ]['updated_at']      = current_time( 'mysql' );
+
+		gn_efi_save_pix_rejected_charges( $order_id, $charges );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_pix_retry_max_date' ) ) {
+	function gn_efi_pix_retry_max_date( $charge ) {
+		if ( empty( $charge['first_rejected_at'] ) ) {
+			return '';
+		}
+
+		$timezone = gn_efi_get_store_timezone();
+		$date     = DateTime::createFromFormat( '!Y-m-d', $charge['first_rejected_at'], $timezone );
+
+		if ( ! $date ) {
+			return '';
+		}
+
+		$date->modify( '+7 days' );
+		return $date->format( 'Y-m-d' );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_pix_retry_min_date' ) ) {
+	function gn_efi_pix_retry_min_date() {
+		$date = new DateTime( 'today', gn_efi_get_store_timezone() );
+		$date->modify( '+1 day' );
+
+		return $date->format( 'Y-m-d' );
+	}
+}
+
+if ( ! function_exists( 'gn_efi_can_retry_pix_charge' ) ) {
+	function gn_efi_can_retry_pix_charge( $charge ) {
+		if ( empty( $charge ) || ! is_array( $charge ) ) {
+			return false;
+		}
+
+		if ( ! isset( $charge['status'] ) || 'REJEITADA' !== $charge['status'] ) {
+			return false;
+		}
+
+		if ( ! empty( $charge['pending_retry'] ) ) {
+			return false;
+		}
+
+		if ( isset( $charge['retry_count'] ) && intval( $charge['retry_count'] ) >= 3 ) {
+			return false;
+		}
+
+		$max_date = gn_efi_pix_retry_max_date( $charge );
+		if ( empty( $max_date ) ) {
+			return false;
+		}
+
+		$today = new DateTime( 'today', gn_efi_get_store_timezone() );
+		$max   = DateTime::createFromFormat( '!Y-m-d', $max_date, gn_efi_get_store_timezone() );
+
+		return $max && $today < $max;
+	}
+}
+
+if ( ! function_exists( 'gn_efi_validate_pix_retry_date' ) ) {
+	function gn_efi_validate_pix_retry_date( $charge, $retry_date ) {
+		if ( ! gn_efi_can_retry_pix_charge( $charge ) ) {
+			return 'Essa cobrança não permite nova retentativa.';
+		}
+
+		$timezone = gn_efi_get_store_timezone();
+		$date     = DateTime::createFromFormat( '!Y-m-d', $retry_date, $timezone );
+
+		if ( ! $date || $date->format( 'Y-m-d' ) !== $retry_date ) {
+			return 'Informe uma data válida para a retentativa.';
+		}
+
+		$today    = new DateTime( 'today', $timezone );
+		$max_date = gn_efi_pix_retry_max_date( $charge );
+		$max      = DateTime::createFromFormat( '!Y-m-d', $max_date, $timezone );
+
+		if ( $date <= $today ) {
+			return 'A data da retentativa deve ser posterior à data atual.';
+		}
+
+		if ( ! $max || $date > $max ) {
+			return 'A data da retentativa deve estar em até 7 dias após a primeira rejeição.';
+		}
+
+		return true;
+	}
+}
+
 
 /**
  * Register autoloader

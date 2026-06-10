@@ -459,7 +459,7 @@ function init_gerencianet_assinaturas_cartao() {
 							$order->update_status( 'failed' );
 							break;
 						case 'refunded':
-							$order->update_status( 'refund' );
+							$order->update_status( 'refunded' );
 							break;
 						case 'contested':
 							$order->update_status( 'failed' );

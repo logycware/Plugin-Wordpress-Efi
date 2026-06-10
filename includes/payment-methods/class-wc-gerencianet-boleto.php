@@ -450,7 +450,7 @@ function init_gerencianet_boleto() {
 
 							break;
 						case 'refunded':
-							$order->update_status( 'refund' );
+							$order->update_status( 'refunded' );
 							break;
 						case 'contested':
 							$order->update_status( 'failed' );
