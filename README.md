@@ -45,6 +45,38 @@ Caso você tenha alguma dúvida ou sugestão, entre em contato conosco pelo site
 
 7. Recomendamos que antes de disponibilizar os pagamentos, o lojista realize testes de cobrança com o sandbox(ambiente de testes) ativado para verificar se o procedimento de pagamento está acontecendo conforme esperado.
 
+## Cartão de crédito por link de pagamento
+
+Além do cartão por checkout transparente, este fork oferece o gateway **"Efí - Cartão de Crédito (link de pagamento)"**, em que o cliente é levado para a tela de pagamento hospedada pela Efí (`POST /v1/charge/one-step/link`).
+
+A diferença prática está em onde o cartão é digitado. No checkout transparente o formulário fica no domínio da loja e o JavaScript da Efí tokeniza os dados no navegador. No link de pagamento a loja não renderiza campo algum de cartão: ela cria a cobrança, recebe uma URL e redireciona o cliente. Como a tela de pagamento é servida pela Efí, um script malicioso na loja não tem como capturar o cartão, e o escopo de PCI DSS do lojista fica no mínimo.
+
+Em troca, o cliente sai do site durante o pagamento, o que costuma custar conversão. Os dois gateways podem ficar ativos ao mesmo tempo, então dá para comparar antes de decidir.
+
+### Configuração
+
+1. Ative "Habilitar Cartão de Crédito por link de pagamento" e informe as credenciais Client ID e Client Secret (produção e homologação). Este gateway não usa Identificador de Conta, porque ele existe apenas para a tokenização no navegador.
+2. Ajuste a validade do link (padrão de 3 dias) e, se quiser, uma mensagem de até 80 caracteres exibida na tela da Efí.
+3. Escolha se o cliente vai direto para a tela da Efí ou se passa antes pela página de pedido recebido da loja, onde encontra um botão para abrir o pagamento.
+
+O cartão não presente por link exige a mesma liberação de análise (KYC) que a Efí pede para o checkout transparente. Sem essa liberação, a criação do link é recusada.
+
+### Como o valor é calculado
+
+O total do pedido do WooCommerce é a fonte de verdade, o que mantém a compatibilidade com produtos de doação, preços personalizados e plugins que alteram o preço no carrinho. Os itens são detalhados apenas para o cliente reconhecer a compra na tela da Efí; se a soma dos itens não fechar exatamente com o total do pedido (um desconto de loja aplicado como taxa negativa, por exemplo), a itemização é descartada em favor de um item único com o total, porque cobrar o valor certo importa mais que o detalhamento.
+
+Diferente da API Pix, a API Cobranças trabalha com centavos em número inteiro: R$ 11,00 é enviado como `1100`.
+
+### Confirmação do pagamento
+
+A confirmação chega pela `notification_url`, o mesmo mecanismo dos demais gateways da API Cobranças. O pedido nasce como "Pagamento pendente" e só avança quando a Efí notifica o status `paid`. Se o pagamento falhar, o pedido vai para "Malsucedido" e o cliente pode tentar de novo pela área "Meus pedidos", que gera uma cobrança e um link novos — a Efí não permite reaproveitar um link cuja cobrança já teve tentativa de pagamento.
+
+Os registros ficam em `efi-cartao-link.log`, disponível no botão "Baixar Logs" das configurações do gateway.
+
+### Limitações
+
+Este gateway cobre pagamento avulso no cartão. Assinaturas continuam pelos gateways de recorrência já existentes, e o Pix (inclusive o Pix Automático) não é afetado: o link de pagamento pertence à API Cobranças e não oferece Pix Automático.
+
 ## Atualização automática deste fork
 
 Este fork se atualiza pelos [Releases deste repositório](https://github.com/logycware/Plugin-Wordpress-Efi/releases), e não pelo wordpress.org. O plugin declara o header `Update URI` apontando para o GitHub, o que faz o WordPress consultar o repositório através do filtro nativo `update_plugins_github.com` e exibir a nova versão no painel padrão de atualizações ("Painel" > "Atualizações" e a tela de Plugins).
