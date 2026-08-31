@@ -45,6 +45,16 @@ Caso você tenha alguma dúvida ou sugestão, entre em contato conosco pelo site
 
 7. Recomendamos que antes de disponibilizar os pagamentos, o lojista realize testes de cobrança com o sandbox(ambiente de testes) ativado para verificar se o procedimento de pagamento está acontecendo conforme esperado.
 
+## Atualização automática deste fork
+
+Este fork se atualiza pelos [Releases deste repositório](https://github.com/logycware/Plugin-Wordpress-Efi/releases), e não pelo wordpress.org. O plugin declara o header `Update URI` apontando para o GitHub, o que faz o WordPress consultar o repositório através do filtro nativo `update_plugins_github.com` e exibir a nova versão no painel padrão de atualizações ("Painel" > "Atualizações" e a tela de Plugins).
+
+A consulta usa a API pública do GitHub, sem necessidade de token, é guardada em cache por 6 horas e, se o GitHub estiver indisponível, o plugin simplesmente mantém a versão instalada.
+
+### Instalação
+
+O plugin precisa estar instalado em `wp-content/plugins/gerencianet-oficial/`, que é o diretório raiz do ZIP publicado em cada Release. Se você já tem a versão do wordpress.org instalada em `wp-content/plugins/woo-gerencianet-official/`, desative-a e remova essa pasta antes de instalar o fork, para não manter duas cópias do plugin.
+
 ## **Documentação Adicional**
 
 A documentação completa com todos os endpoints e detalhes das APIs está disponível em https://dev.efipay.com.br/docs/modulos/WordPress.
