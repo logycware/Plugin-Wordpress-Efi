@@ -118,7 +118,20 @@ class Gerencianet_Integration
 			$certsFolder = plugin_dir_path(__FILE__) . '../../' . $certsFolderHash . '/' . $paymentMethod . '/';
 			$certificatePath = $certsFolder . $wcSettings['gn_certificate_file_name'];
 
-			if (! file_exists($certificatePath)) {
+			// O certificado fica dentro da pasta do plugin, então é apagado a cada
+			// atualização e regravado a partir das configurações. Um arquivo vazio
+			// também conta como ausente: a SDK falha com "Unable to read the cert
+			// file" e, como o arquivo existe, nunca seria regravado.
+			$certificateMissing = ! is_file($certificatePath) || 0 === filesize($certificatePath);
+
+			if ($certificateMissing && empty($wcSettings['gn_certificate_file'])) {
+				gn_log(
+					'Certificado ausente nas configurações do método de pagamento. Reenvie o arquivo do certificado na tela de configuração do gateway.',
+					$paymentMethod
+				);
+			}
+
+			if ($certificateMissing && ! empty($wcSettings['gn_certificate_file'])) {
 				try {
 					if (! is_dir($certsFolder)) {
 						mkdir($certsFolder, 0777, true);
