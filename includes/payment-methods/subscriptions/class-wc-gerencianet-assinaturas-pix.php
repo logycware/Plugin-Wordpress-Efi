@@ -688,12 +688,18 @@ function init_gerencianet_assinaturas_pix()
 					// cobrança mostra o estado que a própria Efí enxerga no instante
 					// da recusa, que é o dado que falta para saber de que lado está
 					// a inconsistência.
-					$this->log_debug('GET /v2/cob/:txid :: releitura apos a recusa', $order_id, array(
+					$cobRelida = (array) $this->gerencianetSDK->detail_pix_charge($txidCob, GERENCIANET_ASSINATURAS_PIX_ID);
+
+					$contexto = array(
 						'txid' => $txidCob,
-						'body' => $this->mask_documents(
-							(array) $this->gerencianetSDK->detail_pix_charge($txidCob, GERENCIANET_ASSINATURAS_PIX_ID)
-						),
-					));
+						'body' => $this->mask_documents($cobRelida),
+					);
+
+					if (isset($cobRelida['status']) && 'ATIVA' === $cobRelida['status']) {
+						$contexto['diagnostico'] = 'A cobrança continua ATIVA depois da recusa e o corpo enviado segue a documentação da Jornada 3, então não há o que corrigir na loja. Leve este txid ao suporte da Efí.';
+					}
+
+					$this->log_debug('GET /v2/cob/:txid :: releitura apos a recusa', $order_id, $contexto);
 
 					throw $e;
 				}
