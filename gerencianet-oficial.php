@@ -30,6 +30,7 @@ if ( ! defined( 'WPINC' ) ) {
 define( 'GERENCIANET_OFICIAL_VERSION', '3.2.0.11' );
 define( 'GERENCIANET_BOLETO_ID', 'wc_gerencianet_boleto' );
 define( 'GERENCIANET_CARTAO_ID', 'wc_gerencianet_cartao' );
+define( 'GERENCIANET_CARTAO_LINK_ID', 'wc_gerencianet_cartao_link' );
 define( 'GERENCIANET_PIX_ID', 'wc_gerencianet_pix' );
 define( 'GERENCIANET_OPEN_FINANCE_ID', 'wc_gerencianet_open_finance' );
 define( 'GERENCIANET_ASSINATURAS_BOLETO_ID', 'wc_gerencianet_assinaturas_boleto' );
