@@ -344,8 +344,12 @@ function init_gerencianet_assinaturas_pix()
 			global $woocommerce;
 			$order = wc_get_order($order_id);
 			$types = array('line_item', 'fee', 'shipping', 'coupon');
-			$value = 0;
-			$shippingTotal = 0;
+			// O total calculado pelo WooCommerce é a fonte de verdade do valor da
+			// assinatura: ele já contempla itens com preço dinâmico (doações e preços
+			// personalizados), taxas, frete, cupons e impostos, enquanto o preço
+			// cadastrado no produto pode continuar valendo 0 nesses cenários.
+			$value = (float) $order->get_total();
+			$shippingTotal = (float) $order->get_shipping_total();
 			$interval = 0;
 			$repeats = 0;
 			$recorrenciaTipo = '';
@@ -356,16 +360,6 @@ function init_gerencianet_assinaturas_pix()
 			$maxLength = 35;
 			foreach ($order->get_items($types) as $item_id => $item) {
 				switch ($item->get_type()) {
-					case 'fee':
-						$value += $item->get_total();
-						break;
-					case 'shipping':
-						$value += $item->get_total();
-						$shippingTotal += $item->get_total();
-						break;
-					case 'coupon':
-						$value -= $item->get_discount();
-						break;
 					case 'line_item':
 						$product = $item->get_product();
 						$interval = intval($product->get_meta('_gerencianet_interval'));
@@ -389,7 +383,6 @@ function init_gerencianet_assinaturas_pix()
 							break 2;
 						}
 						$namePlan = implode(' | ', $allProductNames);
-						$value += $item->get_quantity() * $product->get_price();
 						// Definir tipo de recorrência baseado no meta do produto
 						switch ($interval) {
 							case 1:
@@ -416,14 +409,8 @@ function init_gerencianet_assinaturas_pix()
 						}
 						break;
 					default:
-						$product = $item->get_product();
-						$value += $item->get_quantity() * $product->get_price();
 						break;
 				}
-			}
-
-			if ($order->get_total_tax() > 0) {
-				$value += $order->get_total_tax();
 			}
 
 			$discount = 0;
