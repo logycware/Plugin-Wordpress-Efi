@@ -615,6 +615,59 @@ class Gerencianet_Integration
 		}
 	}
 
+	/**
+	 * Cria a cobranca e devolve o link da tela de pagamento hospedada pela
+	 * Efi. Diferente do checkout transparente, aqui nenhum dado de cartao
+	 * passa pela loja: o pagador digita tudo no dominio da Efi.
+	 */
+	public function one_step_card_link($order_id, $items, $shipping, $notification_url, $email, $expirationDate, $message = '')
+	{
+		$settings = array(
+			'payment_method' => 'credit_card',
+			'expire_at'      => $expirationDate,
+		);
+
+		if ('' !== $message) {
+			$settings['message'] = $message;
+		}
+
+		$body = array(
+			'items'    => $items,
+			'metadata' => array(
+				'custom_id'        => strval($order_id),
+				'notification_url' => $notification_url,
+			),
+			'settings' => $settings,
+		);
+
+		if ('' !== $email) {
+			$body['customer'] = array('email' => $email);
+		}
+
+		if ($shipping) {
+			$body['shippings'] = $shipping;
+		}
+
+		try {
+			$api    = new Gerencianet($this->get_credentials(GERENCIANET_CARTAO_LINK_ID));
+			$charge = $api->createOneStepLink(array(), $body);
+
+			return self::result_api(GERENCIANET_CARTAO_LINK_ID, $charge, true);
+		} catch (GerencianetException $e) {
+			$errorResponse = array(
+				'code'    => $e->getCode(),
+				'error'   => $e->error,
+				'message' => $e->errorDescription,
+			);
+			return self::result_api(GERENCIANET_CARTAO_LINK_ID, $errorResponse, false);
+		} catch (Exception $e) {
+			$errorResponse = array(
+				'message' => $e->getMessage(),
+			);
+			return self::result_api(GERENCIANET_CARTAO_LINK_ID, $errorResponse, false);
+		}
+	}
+
 	public function card_retry($order_id, $payment_token, $paymentMethod)
 	{
 		$body = Gerencianet_Hpos::get_meta($order_id, '_gn_retry_body');
