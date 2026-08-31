@@ -591,6 +591,7 @@ function init_gerencianet_assinaturas_pix()
 					'politicaRetentativa' => "PERMITE_3R_7D",
 					'ativacao' => array(
 						'dadosJornada' => array(
+							'tipoJornada' => 'JORNADA_3',
 							'txid' => $txidCob,
 						)
 					)
