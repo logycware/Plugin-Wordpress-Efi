@@ -55,6 +55,14 @@ A consulta usa a API pública do GitHub, sem necessidade de token, é guardada e
 
 O plugin precisa estar instalado em `wp-content/plugins/gerencianet-oficial/`, que é o diretório raiz do ZIP publicado em cada Release. Se você já tem a versão do wordpress.org instalada em `wp-content/plugins/woo-gerencianet-official/`, desative-a e remova essa pasta antes de instalar o fork, para não manter duas cópias do plugin.
 
+### Publicando uma nova versão
+
+1. Atualize `Version` e `GERENCIANET_OFICIAL_VERSION` em `gerencianet-oficial.php` (e o `Stable tag` no `readme.txt`), mantendo os três iguais.
+2. Crie a tag e o Release usando a versão como nome, com ou sem o prefixo `v` (por exemplo `v3.2.0.3`).
+3. O workflow `.github/workflows/release-asset.yml` gera e anexa automaticamente o asset `gerencianet-oficial.zip` ao Release, sempre com `gerencianet-oficial/` como diretório raiz.
+
+O updater usa esse asset como pacote de atualização. O `zipball_url` gerado pelo GitHub não é utilizado porque o seu diretório raiz inclui o hash do commit, o que faria o WordPress instalar o plugin em uma pasta diferente a cada atualização.
+
 ## **Documentação Adicional**
 
 A documentação completa com todos os endpoints e detalhes das APIs está disponível em https://dev.efipay.com.br/docs/modulos/WordPress.
