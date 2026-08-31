@@ -604,6 +604,17 @@ function init_gerencianet_assinaturas_pix()
 
 
 			try {
+				// A Efí documenta a Jornada 3 como locrec, cobrança imediata e só
+				// então a recorrência. O plugin criava a cobrança antes do location,
+				// e essa é a única divergência que restou entre o fluxo da loja e o
+				// fluxo de referência da API.
+				$locationResponse = $this->gerencianetSDK->generate_location_rec();
+				$location = json_decode($locationResponse, true);
+
+				$this->log_debug('POST /v2/locrec :: resposta', $order_id, array(
+					'body' => is_array($location) ? $location : array('bruto' => $locationResponse),
+				));
+
 				$bodyCob = array(
 					'calendario'     => array('expiracao' => $this->get_pix_expiration_in_seconds()),
 					'valor'          => array('original' => sprintf('%0.2f', $value)),
@@ -649,13 +660,6 @@ function init_gerencianet_assinaturas_pix()
 					);
 				}
 
-				$locationResponse = $this->gerencianetSDK->generate_location_rec();
-				$location = json_decode($locationResponse, true);
-
-				$this->log_debug('POST /v2/locrec :: resposta', $order_id, array(
-					'body' => is_array($location) ? $location : array('bruto' => $locationResponse),
-				));
-
 				$bodyRec = array(
 					'vinculo' => $vinculo,
 					'calendario' => $calendario,
@@ -676,7 +680,23 @@ function init_gerencianet_assinaturas_pix()
 					'body' => $this->mask_documents($bodyRec),
 				));
 
-				$recResponse = $this->gerencianetSDK->pay_pix_subscription($bodyRec, $txidCob);
+				try {
+					$recResponse = $this->gerencianetSDK->pay_pix_subscription($bodyRec, $txidCob);
+				} catch (Exception $e) {
+					// A API recusa a recorrência dizendo que a cobrança não está
+					// ativa mesmo depois de devolver ATIVA na criação. Reler a
+					// cobrança mostra o estado que a própria Efí enxerga no instante
+					// da recusa, que é o dado que falta para saber de que lado está
+					// a inconsistência.
+					$this->log_debug('GET /v2/cob/:txid :: releitura apos a recusa', $order_id, array(
+						'txid' => $txidCob,
+						'body' => $this->mask_documents(
+							(array) $this->gerencianetSDK->detail_pix_charge($txidCob, GERENCIANET_ASSINATURAS_PIX_ID)
+						),
+					));
+
+					throw $e;
+				}
 
 				$rec = json_decode($recResponse, true);
 
