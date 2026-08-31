@@ -1,0 +1,91 @@
+name: Publicar ZIP do plugin
+
+# Gera o asset gerencianet-oficial.zip consumido pelo updater do plugin
+# (header `Update URI` + filtro update_plugins_github.com).
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag do Release que receberá o ZIP'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Gerar e anexar gerencianet-oficial.zip
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+
+      - name: Resolver a tag do Release
+        id: release
+        run: |
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            tag='${{ github.event.release.tag_name }}'
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag='${{ inputs.tag }}'
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [ -z "$tag" ]; then
+            echo "Não foi possível determinar a tag do Release." >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Conferir a versão declarada no plugin
+        run: |
+          tag='${{ steps.release.outputs.tag }}'
+          tag_version="${tag#v}"
+          plugin_version="$(sed -n "s/^define( *'GERENCIANET_OFICIAL_VERSION', *'\([^']*\)'.*/\1/p" gerencianet-oficial.php)"
+          header_version="$(sed -n 's/^ \* Version: *\(.*\)$/\1/p' gerencianet-oficial.php | tr -d '[:space:]')"
+
+          echo "Tag: $tag_version | GERENCIANET_OFICIAL_VERSION: $plugin_version | Version: $header_version"
+
+          if [ "$plugin_version" != "$header_version" ]; then
+            echo "::warning::Version ($header_version) e GERENCIANET_OFICIAL_VERSION ($plugin_version) estão divergentes."
+          fi
+
+          if [ "$tag_version" != "$plugin_version" ]; then
+            echo "::warning::A tag ($tag_version) não corresponde à versão do plugin ($plugin_version); o WordPress só oferece a atualização se a versão do plugin for maior que a instalada."
+          fi
+
+      # O diretório raiz do ZIP precisa ser gerencianet-oficial/ para que a
+      # atualização substitua wp-content/plugins/gerencianet-oficial/ no lugar
+      # de criar uma pasta nova, como aconteceria com o zipball do GitHub.
+      - name: Gerar o ZIP com raiz gerencianet-oficial/
+        run: |
+          rm -rf build
+          mkdir -p build/gerencianet-oficial
+
+          # git archive leva apenas os arquivos versionados, sem restos de build.
+          git archive HEAD | tar -x -C build/gerencianet-oficial
+          rm -rf build/gerencianet-oficial/.github
+          rm -f build/gerencianet-oficial/.gitignore
+
+          test -f build/gerencianet-oficial/gerencianet-oficial.php
+
+          cd build
+          zip -rq gerencianet-oficial.zip gerencianet-oficial
+          unzip -l gerencianet-oficial.zip | head -n 20
+
+      - name: Anexar o ZIP ao Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ steps.release.outputs.tag }}'
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "$tag" --generate-notes
+          gh release upload "$tag" build/gerencianet-oficial.zip --repo "$GITHUB_REPOSITORY" --clobber
