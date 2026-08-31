@@ -576,9 +576,11 @@ function init_gerencianet_assinaturas_pix()
 					'valor' => $valor,
 					'loc' => $location['id'],
 					'politicaRetentativa' => "PERMITE_3R_7D",
+					// A API deriva o tipo de jornada a partir do txid e devolve
+					// tipoJornada apenas na resposta; enviá-lo aqui faz a criação da
+					// recorrência ser recusada por não respeitar o schema.
 					'ativacao' => array(
 						'dadosJornada' => array(
-							'tipoJornada' => 'JORNADA_3',
 							'txid' => $txidCob,
 						)
 					)
