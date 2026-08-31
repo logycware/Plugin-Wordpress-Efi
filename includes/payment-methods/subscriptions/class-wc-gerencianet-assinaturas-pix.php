@@ -222,7 +222,7 @@ function init_gerencianet_assinaturas_pix()
 					'title'       => __('Expiração do pix', Gerencianet_I18n::getTextDomain()),
 					'type'        => 'number',
 					'description' => __('Em quantas horas o Pix expira depois de emitido', Gerencianet_I18n::getTextDomain()),
-					'placeholder' => '0',
+					'placeholder' => '24',
 					'default'     => '24',
 				),
 				'gn_pix_mtls'                   => array(
@@ -336,6 +336,24 @@ function init_gerencianet_assinaturas_pix()
 				}
 			}
 			return true;
+		}
+
+		/**
+		 * A API do Pix recusa cobranças com `calendario.expiracao` menor ou igual
+		 * a zero, e o campo de configuração fica vazio sempre que o lojista limpa
+		 * a caixa "Expiração do pix". Nesse caso a cobrança nasceria expirada e a
+		 * recorrência da Jornada 3 seria recusada porque o txid referenciado não
+		 * está ativo, então o padrão de 24 horas é reaplicado.
+		 */
+		private function get_pix_expiration_in_seconds()
+		{
+			$hours = intval($this->get_option('gn_pix_number_hours'));
+
+			if ($hours <= 0) {
+				$hours = 24;
+			}
+
+			return $hours * 3600;
 		}
 
 		// Feito
@@ -542,7 +560,7 @@ function init_gerencianet_assinaturas_pix()
 
 			try {
 				$bodyCob = array(
-					'calendario'     => array('expiracao' => intval($this->get_option('gn_pix_number_hours')) * 3600),
+					'calendario'     => array('expiracao' => $this->get_pix_expiration_in_seconds()),
 					'valor'          => array('original' => sprintf('%0.2f', $value)),
 					'chave'          => $this->get_option('gn_pix_key'),
 				);
@@ -566,7 +584,29 @@ function init_gerencianet_assinaturas_pix()
 				$chargeCobResponse = $this->gerencianetSDK->pay_pix($bodyCob, GERENCIANET_ASSINATURAS_PIX_ID);
 				$chargeCob = json_decode($chargeCobResponse, true);
 
-				$txidCob = $chargeCob['txid'];
+				$txidCob   = isset($chargeCob['txid']) ? $chargeCob['txid'] : '';
+				$statusCob = isset($chargeCob['status']) ? $chargeCob['status'] : '';
+
+				// A Jornada 3 só aceita a recorrência enquanto a cobrança imediata
+				// referenciada em ativacao.dadosJornada.txid estiver ATIVA. Registrar
+				// o par txid/status é o que permite separar um problema da cobrança
+				// de uma recusa vinda do /v2/rec, já que a API responde apenas que a
+				// cobrança "não está ativa".
+				gn_log(
+					array(
+						'etapa'  => 'cobranca imediata da Jornada 3',
+						'txid'   => $txidCob,
+						'status' => $statusCob,
+					),
+					GERENCIANET_ASSINATURAS_PIX_ID
+				);
+
+				if ('' === $txidCob || ('' !== $statusCob && 'ATIVA' !== $statusCob)) {
+					throw new Exception(
+						__('Não foi possível criar a assinatura porque a cobrança inicial do Pix não ficou ativa. Tente novamente ou entre em contato com o proprietário da loja.', Gerencianet_I18n::getTextDomain()),
+						1
+					);
+				}
 
 				$locationResponse = $this->gerencianetSDK->generate_location_rec();
 				$location = json_decode($locationResponse, true);
