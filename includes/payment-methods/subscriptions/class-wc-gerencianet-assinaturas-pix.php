@@ -584,7 +584,29 @@ function init_gerencianet_assinaturas_pix()
 				$chargeCobResponse = $this->gerencianetSDK->pay_pix($bodyCob, GERENCIANET_ASSINATURAS_PIX_ID);
 				$chargeCob = json_decode($chargeCobResponse, true);
 
-				$txidCob = $chargeCob['txid'];
+				$txidCob   = isset($chargeCob['txid']) ? $chargeCob['txid'] : '';
+				$statusCob = isset($chargeCob['status']) ? $chargeCob['status'] : '';
+
+				// A Jornada 3 só aceita a recorrência enquanto a cobrança imediata
+				// referenciada em ativacao.dadosJornada.txid estiver ATIVA. Registrar
+				// o par txid/status é o que permite separar um problema da cobrança
+				// de uma recusa vinda do /v2/rec, já que a API responde apenas que a
+				// cobrança "não está ativa".
+				gn_log(
+					array(
+						'etapa'  => 'cobranca imediata da Jornada 3',
+						'txid'   => $txidCob,
+						'status' => $statusCob,
+					),
+					GERENCIANET_ASSINATURAS_PIX_ID
+				);
+
+				if ('' === $txidCob || ('' !== $statusCob && 'ATIVA' !== $statusCob)) {
+					throw new Exception(
+						__('Não foi possível criar a assinatura porque a cobrança inicial do Pix não ficou ativa. Tente novamente ou entre em contato com o proprietário da loja.', Gerencianet_I18n::getTextDomain()),
+						1
+					);
+				}
 
 				$locationResponse = $this->gerencianetSDK->generate_location_rec();
 				$location = json_decode($locationResponse, true);
