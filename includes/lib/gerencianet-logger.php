@@ -44,10 +44,31 @@ if ( ! function_exists( 'gn_log' ) ) {
 				$fileName = 'gerencianet.log';
 				break;
 		}
-		write_data($upload_dir, $fileName, $entry);
+		write_data($upload_dir, $fileName, $entry, 'a', $payment_method);
 	}
 
-	function write_data($upload_dir, $fileName, $entry, $mode = 'a'){
+	/**
+	 * O log costuma ser analisado fora da loja, longe do efi-versions.log, e o
+	 * mesmo erro pode ter causas diferentes conforme a versão instalada e o
+	 * ambiente configurado. Por isso os dois acompanham cada entrada.
+	 */
+	function gn_log_context($payment_method) {
+		$context = defined('GERENCIANET_OFICIAL_VERSION') ? 'plugin ' . GERENCIANET_OFICIAL_VERSION : 'plugin ?';
+
+		if (empty($payment_method)) {
+			return $context;
+		}
+
+		$settings = maybe_unserialize(get_option('woocommerce_' . $payment_method . '_settings'));
+
+		if (is_array($settings) && isset($settings['gn_sandbox'])) {
+			$context .= ' | ' . ('yes' === $settings['gn_sandbox'] ? 'homologacao' : 'producao');
+		}
+
+		return $context;
+	}
+
+	function write_data($upload_dir, $fileName, $entry, $mode = 'a', $payment_method = null){
 		// Write the log file.
 		$filePath  = $upload_dir . '/' . $fileName;
 
@@ -64,7 +85,7 @@ if ( ! function_exists( 'gn_log' ) ) {
 
 		$fileName  = fopen( $filePath, $mode );
 		$bytes = fwrite( $fileName, "------------------- \n" );
-		$bytes = fwrite( $fileName, current_time( 'mysql' ) . ' Efi-Log:: ' . $entry . "\n" );
+		$bytes = fwrite( $fileName, current_time( 'mysql' ) . ' Efi-Log [' . gn_log_context( $payment_method ) . ']:: ' . $entry . "\n" );
 		$bytes = fwrite( $fileName, "------------------- \n" );
 		fclose( $fileName );
 		return $bytes;

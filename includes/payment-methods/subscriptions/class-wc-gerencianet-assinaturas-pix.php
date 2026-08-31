@@ -356,6 +356,51 @@ function init_gerencianet_assinaturas_pix()
 			return $hours * 3600;
 		}
 
+		/**
+		 * Registra uma etapa da Jornada 3 com o contexto necessário para comparar
+		 * o que a loja enviou com o que a API respondeu. Sem isso o log guarda
+		 * apenas a recusa da Efí, que descreve o problema sem dizer qual corpo
+		 * gerou a recusa.
+		 */
+		private function log_debug($etapa, $order_id, array $contexto = array())
+		{
+			gn_log(
+				array_merge(
+					array(
+						'etapa'  => $etapa,
+						'pedido' => '#' . $order_id,
+					),
+					$contexto
+				),
+				GERENCIANET_ASSINATURAS_PIX_ID
+			);
+		}
+
+		/**
+		 * O log é baixado e costuma ser encaminhado ao suporte, então CPF e CNPJ
+		 * do cliente saem mascarados. O restante do corpo é preservado porque é
+		 * justamente o que permite reproduzir a requisição recusada.
+		 */
+		private function mask_documents($data)
+		{
+			if (! is_array($data)) {
+				return $data;
+			}
+
+			foreach ($data as $key => $value) {
+				if (is_array($value)) {
+					$data[$key] = $this->mask_documents($value);
+					continue;
+				}
+
+				if (('cpf' === $key || 'cnpj' === $key) && is_string($value) && strlen($value) > 4) {
+					$data[$key] = str_repeat('*', strlen($value) - 4) . substr($value, -4);
+				}
+			}
+
+			return $data;
+		}
+
 		// Feito
 		public function process_payment($order_id)
 		{
@@ -580,6 +625,10 @@ function init_gerencianet_assinaturas_pix()
 
 				array_push($bodyCob['infoAdicionais'], array('nome'  => 'Numero do Pedido', 'valor' => '#' . $order_id));
 
+				$this->log_debug('POST /v2/cob :: requisicao', $order_id, array(
+					'body' => $this->mask_documents($bodyCob),
+				));
+
 				// Refazer tudo aqui
 				$chargeCobResponse = $this->gerencianetSDK->pay_pix($bodyCob, GERENCIANET_ASSINATURAS_PIX_ID);
 				$chargeCob = json_decode($chargeCobResponse, true);
@@ -587,20 +636,12 @@ function init_gerencianet_assinaturas_pix()
 				$txidCob   = isset($chargeCob['txid']) ? $chargeCob['txid'] : '';
 				$statusCob = isset($chargeCob['status']) ? $chargeCob['status'] : '';
 
-				// A Jornada 3 só aceita a recorrência enquanto a cobrança imediata
-				// referenciada em ativacao.dadosJornada.txid estiver ATIVA. Registrar
-				// o par txid/status é o que permite separar um problema da cobrança
-				// de uma recusa vinda do /v2/rec, já que a API responde apenas que a
-				// cobrança "não está ativa".
-				gn_log(
-					array(
-						'etapa'  => 'cobranca imediata da Jornada 3',
-						'txid'   => $txidCob,
-						'status' => $statusCob,
-					),
-					GERENCIANET_ASSINATURAS_PIX_ID
-				);
+				$this->log_debug('POST /v2/cob :: resposta', $order_id, array(
+					'body' => $this->mask_documents(is_array($chargeCob) ? $chargeCob : array('bruto' => $chargeCobResponse)),
+				));
 
+				// A Jornada 3 só aceita a recorrência enquanto a cobrança imediata
+				// referenciada em ativacao.dadosJornada.txid estiver ATIVA.
 				if ('' === $txidCob || ('' !== $statusCob && 'ATIVA' !== $statusCob)) {
 					throw new Exception(
 						__('Não foi possível criar a assinatura porque a cobrança inicial do Pix não ficou ativa. Tente novamente ou entre em contato com o proprietário da loja.', Gerencianet_I18n::getTextDomain()),
@@ -610,6 +651,11 @@ function init_gerencianet_assinaturas_pix()
 
 				$locationResponse = $this->gerencianetSDK->generate_location_rec();
 				$location = json_decode($locationResponse, true);
+
+				$this->log_debug('POST /v2/locrec :: resposta', $order_id, array(
+					'body' => is_array($location) ? $location : array('bruto' => $locationResponse),
+				));
+
 				$bodyRec = array(
 					'vinculo' => $vinculo,
 					'calendario' => $calendario,
@@ -626,9 +672,19 @@ function init_gerencianet_assinaturas_pix()
 					)
 				);
 
+				$this->log_debug('POST /v2/rec :: requisicao', $order_id, array(
+					'body' => $this->mask_documents($bodyRec),
+				));
+
 				$recResponse = $this->gerencianetSDK->pay_pix_subscription($bodyRec, $txidCob);
 
 				$rec = json_decode($recResponse, true);
+
+				$this->log_debug('GET /v2/rec/:idRec :: resposta', $order_id, array(
+					'idRec'      => isset($rec['idRec']) ? $rec['idRec'] : '',
+					'status'     => isset($rec['status']) ? $rec['status'] : '',
+					'copiaECola' => isset($rec['dadosQR']['pixCopiaECola']) ? 'recebido' : 'ausente',
+				));
 
 				$periodo_de_teste = "Não possui";
 
@@ -671,6 +727,9 @@ function init_gerencianet_assinaturas_pix()
 					'redirect' => $this->get_return_url($order),
 				);
 			} catch (Exception $e) {
+				$this->log_debug('checkout da assinatura interrompido', $order_id, array(
+					'mensagem' => $e->getMessage(),
+				));
 				wc_add_notice($e->getMessage(), 'error');
 				return;
 			}
