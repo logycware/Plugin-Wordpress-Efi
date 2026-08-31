@@ -135,7 +135,9 @@ function init_gerencianet_pix() {
 
 		public function init_form_fields() {
 			
-			$certificateLabel = $this->get_option( 'gn_certificate_file_name') != 'Nenhum certificado salvo' ? 'Certificado salvo: '.$this->get_option( 'gn_certificate_file_name' ) : $this->get_option( 'gn_certificate_file_name' );
+			// Considera o conteúdo, e não apenas o nome, para não exibir
+			// "Certificado salvo" quando o arquivo não está mais guardado.
+			$certificateLabel = $this->get_option( 'gn_certificate_file' ) != '' ? 'Certificado salvo: '.$this->get_option( 'gn_certificate_file_name' ) : 'Nenhum certificado salvo';
 
 			$this->form_fields = array(
 				'gn_api_section'                => array(
@@ -640,6 +642,17 @@ function init_gerencianet_pix() {
 				}
 			}
 			return $actions;
+		}
+
+		/**
+		 * O campo do certificado é do tipo `file`, para o qual o WooCommerce não
+		 * possui validação própria: ao salvar as configurações ele grava o valor
+		 * vindo do $_POST, que nunca existe em um input de arquivo, apagando o
+		 * certificado guardado. Preserva o conteúdo atual e deixa o upload,
+		 * quando houver, ser gravado por savePixCertificate().
+		 */
+		public function validate_gn_certificate_file_field( $key, $value ) {
+			return $this->get_option( 'gn_certificate_file' );
 		}
 
 		public function validate_gn_client_id_production_field( $key, $value ) {

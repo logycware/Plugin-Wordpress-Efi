@@ -1010,6 +1010,18 @@ function init_gerencianet_assinaturas_pix()
 			return $subscription_id;
 		}
 
+		/**
+		 * O campo do certificado é do tipo `file`, para o qual o WooCommerce não
+		 * possui validação própria: ao salvar as configurações ele grava o valor
+		 * vindo do $_POST, que nunca existe em um input de arquivo, apagando o
+		 * certificado guardado. Preserva o conteúdo atual e deixa o upload,
+		 * quando houver, ser gravado por savePixCertificate().
+		 */
+		public function validate_gn_certificate_file_field($key, $value)
+		{
+			return $this->get_option('gn_certificate_file');
+		}
+
 		public function validate_gn_client_id_production_field($key, $value)
 		{
 			if (! preg_match('/^Client_Id_[a-zA-Z0-9]{40}$/', $value)) {
