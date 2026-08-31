@@ -311,6 +311,29 @@ class Gerencianet_Integration
 		return self::result_api($paymentMethod, $data, $response);
 	}
 
+	/**
+	 * Releitura de diagnostico da cobranca imediata. A criacao da recorrencia e
+	 * recusada dizendo que a cobranca referenciada nao esta ativa mesmo quando a
+	 * criacao devolveu ATIVA, entao vale registrar o estado que a propria API
+	 * enxerga no momento da recusa. Nunca lanca, para nao substituir o erro
+	 * original por uma falha da consulta.
+	 */
+	public function detail_pix_charge($txid, $paymentMethod = GERENCIANET_PIX_ID)
+	{
+		try {
+			$api = new Gerencianet($this->get_credentials($paymentMethod));
+			return $api->pixDetailCharge(array('txid' => $txid));
+		} catch (GerencianetException $e) {
+			return array(
+				'code'    => $e->getCode(),
+				'error'   => $e->error,
+				'message' => $e->errorDescription,
+			);
+		} catch (Exception $e) {
+			return array('message' => $e->getMessage());
+		}
+	}
+
 	public function generate_qrcode($locationId)
 	{
 		$response = false;
