@@ -1,0 +1,163 @@
+name: Mesclar PR e publicar Release
+
+# Mescla um Pull Request no master com um clique. O push resultante dispara
+# auto-release.yml (tag + Release) e, em seguida, release-asset.yml (ZIP).
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Número do Pull Request a mesclar'
+        required: true
+        type: number
+      merge_method:
+        description: 'Como mesclar o PR no master'
+        required: true
+        default: merge
+        type: choice
+        options:
+          - merge
+          - squash
+          - rebase
+      wait_for_release:
+        description: 'Aguardar o Release e o ZIP ficarem prontos'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    name: Mesclar PR #${{ inputs.pr_number }}
+    runs-on: ubuntu-latest
+
+    outputs:
+      merged_sha: ${{ steps.merge.outputs.sha }}
+      plugin_version: ${{ steps.version.outputs.version }}
+      release_tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Conferir o Pull Request
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr='${{ inputs.pr_number }}'
+
+          state="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json state -q .state)"
+          base="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json baseRefName -q .baseRefName)"
+          mergeable="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json mergeable -q .mergeable)"
+
+          echo "PR #$pr | estado=$state | base=$base | mergeable=$mergeable"
+
+          if [ "$state" != "OPEN" ]; then
+            echo "O PR #$pr não está aberto (estado: $state)." >&2
+            exit 1
+          fi
+
+          if [ "$base" != "master" ]; then
+            echo "Este workflow só mescla PRs com base master (base atual: $base)." >&2
+            exit 1
+          fi
+
+          if [ "$mergeable" = "CONFLICTING" ]; then
+            echo "O PR #$pr tem conflitos; resolva manualmente antes de mesclar." >&2
+            exit 1
+          fi
+
+      - name: Mesclar o Pull Request
+        id: merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr='${{ inputs.pr_number }}'
+          method='${{ inputs.merge_method }}'
+
+          case "$method" in
+            merge)
+              gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --merge --delete-branch
+              ;;
+            squash)
+              gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
+              ;;
+            rebase)
+              gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --rebase --delete-branch
+              ;;
+          esac
+
+          sha="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json mergeCommit -q .mergeCommit.oid)"
+          echo "PR #$pr mesclado em $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Baixar o master atualizado
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Ler a versão que será publicada
+        id: version
+        run: |
+          plugin_version="$(sed -n "s/^define( *'GERENCIANET_OFICIAL_VERSION', *'\([^']*\)'.*/\1/p" gerencianet-oficial.php)"
+          header_version="$(sed -n 's/^ \* Version: *\(.*\)$/\1/p' gerencianet-oficial.php | tr -d '[:space:]')"
+          stable_tag="$(sed -n 's/^Stable tag: *\(.*\)$/\1/p' readme.txt | tr -d '[:space:]')"
+
+          if [ "$plugin_version" != "$header_version" ] || [ "$plugin_version" != "$stable_tag" ]; then
+            echo "::warning::Version, GERENCIANET_OFICIAL_VERSION e Stable tag divergem ($header_version / $plugin_version / $stable_tag)."
+          fi
+
+          echo "version=$plugin_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$plugin_version" >> "$GITHUB_OUTPUT"
+
+  wait-release:
+    name: Aguardar Release v${{ needs.merge.outputs.plugin_version }}
+    runs-on: ubuntu-latest
+    needs: merge
+    if: inputs.wait_for_release
+
+    steps:
+      - name: Esperar o Release ser criado
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ needs.merge.outputs.release_tag }}'
+
+          for attempt in $(seq 1 30); do
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $tag encontrado."
+              break
+            fi
+
+            if [ "$attempt" -eq 30 ]; then
+              echo "Release $tag não apareceu a tempo. Confira o workflow Publicar Release ao mesclar no master." >&2
+              exit 1
+            fi
+
+            echo "Aguardando Release $tag... ($attempt/30)"
+            sleep 20
+          done
+
+      - name: Esperar o asset gerencianet-oficial.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ needs.merge.outputs.release_tag }}'
+
+          for attempt in $(seq 1 30); do
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx 'gerencianet-oficial.zip'; then
+              echo "Asset gerencianet-oficial.zip anexado ao Release $tag."
+              gh release view "$tag" --repo "$GITHUB_REPOSITORY"
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 30 ]; then
+              echo "O ZIP ainda não foi anexado. Confira o workflow Publicar ZIP do plugin." >&2
+              exit 1
+            fi
+
+            echo "Aguardando gerencianet-oficial.zip... ($attempt/30)"
+            sleep 20
+          done

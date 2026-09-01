@@ -89,11 +89,34 @@ O plugin precisa estar instalado em `wp-content/plugins/gerencianet-oficial/`, q
 
 ### Publicando uma nova versão
 
-1. Atualize `Version` e `GERENCIANET_OFICIAL_VERSION` em `gerencianet-oficial.php` (e o `Stable tag` no `readme.txt`), mantendo os três iguais.
-2. Crie a tag e o Release usando a versão como nome, com ou sem o prefixo `v` (por exemplo `v3.2.0.3`).
-3. O workflow `.github/workflows/release-asset.yml` gera e anexa automaticamente o asset `gerencianet-oficial.zip` ao Release, sempre com `gerencianet-oficial/` como diretório raiz.
+#### Fluxo automático (recomendado)
 
-O updater usa esse asset como pacote de atualização. O `zipball_url` gerado pelo GitHub não é utilizado porque o seu diretório raiz inclui o hash do commit, o que faria o WordPress instalar o plugin em uma pasta diferente a cada atualização.
+1. Abra um Pull Request para `master` com o bump de versão (`Version`, `GERENCIANET_OFICIAL_VERSION` e `Stable tag` iguais).
+2. Vá em **Actions → Mesclar PR e publicar Release → Run workflow**.
+3. Informe o número do PR e confirme.
+
+O workflow mescla o PR no `master`. Em seguida:
+
+| Etapa | Workflow | O que faz |
+| --- | --- | --- |
+| 1 | `auto-release.yml` | Cria a tag `vX.Y.Z` e o GitHub Release |
+| 2 | `release-asset.yml` | Anexa `gerencianet-oficial.zip` ao Release |
+
+Se você mesclar o PR manualmente no GitHub (botão **Merge pull request**), a etapa 1 e 2 também disparam sozinhas — não precisa rodar o workflow de merge.
+
+#### Fluxo manual (alternativa)
+
+1. Atualize `Version`, `GERENCIANET_OFICIAL_VERSION` e `Stable tag` para o mesmo valor.
+2. Mescle no `master` ou crie a tag `vX.Y.Z` manualmente.
+3. O workflow `release-asset.yml` gera e anexa `gerencianet-oficial.zip`.
+
+#### Requisitos
+
+- A versão no PR precisa ser **maior** que a do último Release instalado na loja.
+- Se `Version`, `GERENCIANET_OFICIAL_VERSION` e `Stable tag` divergirem, o Release automático **falha** de propósito.
+- Se a tag `vX.Y.Z` já existir, nada é recriado (evita sobrescrever Release publicado).
+
+O updater usa o asset `gerencianet-oficial.zip` como pacote de atualização. O `zipball_url` gerado pelo GitHub não é utilizado porque o diretório raiz incluiria o hash do commit, o que faria o WordPress instalar o plugin em uma pasta diferente a cada atualização.
 
 ## **Documentação Adicional**
 
