@@ -1,0 +1,121 @@
+name: Publicar Release ao mesclar no master
+
+# Push no master com versao nova -> tag + Release + gerencianet-oficial.zip.
+# O GITHUB_TOKEN nao dispara outros workflows ao criar o Release, entao o ZIP
+# e gerado neste mesmo workflow.
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publicar Release e ZIP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ler a versão do plugin
+        id: version
+        run: |
+          plugin_version="$(sed -n "s/^define( *'GERENCIANET_OFICIAL_VERSION', *'\([^']*\)'.*/\1/p" gerencianet-oficial.php)"
+          header_version="$(sed -n 's/^ \* Version: *\(.*\)$/\1/p' gerencianet-oficial.php | tr -d '[:space:]')"
+          stable_tag="$(sed -n 's/^Stable tag: *\(.*\)$/\1/p' readme.txt | tr -d '[:space:]')"
+
+          if [ -z "$plugin_version" ]; then
+            echo "Não foi possível ler GERENCIANET_OFICIAL_VERSION." >&2
+            exit 1
+          fi
+
+          echo "Versão do plugin: $plugin_version"
+          echo "Version (header): $header_version"
+          echo "Stable tag: $stable_tag"
+
+          if [ "$plugin_version" != "$header_version" ] || [ "$plugin_version" != "$stable_tag" ]; then
+            echo "::error::Version, GERENCIANET_OFICIAL_VERSION e Stable tag precisam ser iguais antes de publicar um Release."
+            exit 1
+          fi
+
+          echo "version=$plugin_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$plugin_version" >> "$GITHUB_OUTPUT"
+
+      - name: Verificar Release e asset existentes
+        id: exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+          has_release=false
+          has_zip=false
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            has_release=true
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx 'gerencianet-oficial.zip'; then
+              has_zip=true
+            fi
+          fi
+
+          echo "Release $tag: release=$has_release zip=$has_zip"
+
+          if [ "$has_release" = true ] && [ "$has_zip" = true ]; then
+            echo "Release e ZIP já publicados; nada a fazer."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "has_release=$has_release" >> "$GITHUB_OUTPUT"
+          echo "has_zip=$has_zip" >> "$GITHUB_OUTPUT"
+
+      - name: Criar tag e Release
+        if: steps.exists.outputs.skip != 'true' && steps.exists.outputs.has_release != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$tag" \
+            --generate-notes \
+            --target "${{ github.sha }}"
+
+          echo "Release $tag criado a partir de ${{ github.sha }}."
+
+      - name: Gerar o ZIP com raiz gerencianet-oficial/
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          rm -rf build
+          mkdir -p build/gerencianet-oficial
+
+          git archive HEAD | tar -x -C build/gerencianet-oficial
+          rm -rf build/gerencianet-oficial/.github
+          rm -f build/gerencianet-oficial/.gitignore
+
+          test -f build/gerencianet-oficial/gerencianet-oficial.php
+
+          cd build
+          zip -rq gerencianet-oficial.zip gerencianet-oficial
+          unzip -l gerencianet-oficial.zip | head -n 20
+
+      - name: Anexar gerencianet-oficial.zip ao Release
+        if: steps.exists.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+          gh release upload "$tag" build/gerencianet-oficial.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY"
