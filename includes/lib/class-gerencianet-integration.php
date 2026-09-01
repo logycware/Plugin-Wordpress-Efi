@@ -623,8 +623,12 @@ class Gerencianet_Integration
 	public function one_step_card_link($order_id, $items, $shipping, $notification_url, $email, $expirationDate, $message = '')
 	{
 		$settings = array(
-			'payment_method' => 'credit_card',
-			'expire_at'      => $expirationDate,
+			'payment_method'           => 'credit_card',
+			'expire_at'                => $expirationDate,
+			// A API recusa a criacao do link sem esse campo, apesar de a
+			// documentacao nao o marcar como obrigatorio. O endereco de entrega
+			// ja foi coletado pelo checkout do WooCommerce.
+			'request_delivery_address' => false,
 		);
 
 		if ('' !== $message) {

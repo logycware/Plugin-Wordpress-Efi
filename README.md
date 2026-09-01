@@ -56,7 +56,7 @@ Em troca, o cliente sai do site durante o pagamento, o que costuma custar conver
 ### Configuração
 
 1. Ative "Habilitar Cartão de Crédito por link de pagamento" e informe as credenciais Client ID e Client Secret (produção e homologação). Este gateway não usa Identificador de Conta, porque ele existe apenas para a tokenização no navegador.
-2. Ajuste a validade do link (padrão de 3 dias) e, se quiser, uma mensagem de até 80 caracteres exibida na tela da Efí.
+2. Ajuste a validade do link (padrão de 3 dias) e, se quiser, uma mensagem exibida na tela da Efí. A Efí só aceita mensagens de 3 a 80 caracteres, então mensagens menores são ignoradas em vez de fazer a cobrança falhar.
 3. Escolha se o cliente vai direto para a tela da Efí ou se passa antes pela página de pedido recebido da loja, onde encontra um botão para abrir o pagamento.
 
 O cartão não presente por link exige a mesma liberação de análise (KYC) que a Efí pede para o checkout transparente. Sem essa liberação, a criação do link é recusada.
