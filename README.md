@@ -99,8 +99,9 @@ O workflow mescla o PR no `master`. Em seguida:
 
 | Etapa | Workflow | O que faz |
 | --- | --- | --- |
-| 1 | `auto-release.yml` | Cria a tag `vX.Y.Z` e o GitHub Release |
-| 2 | `release-asset.yml` | Anexa `gerencianet-oficial.zip` ao Release |
+| 1 | `auto-release.yml` | Cria a tag `vX.Y.Z`, o GitHub Release e anexa `gerencianet-oficial.zip` |
+
+Se o Release já existir mas o ZIP estiver faltando (por exemplo após um deploy parcial), um novo push no `master` completa só o upload do asset.
 
 Se você mesclar o PR manualmente no GitHub (botão **Merge pull request**), a etapa 1 e 2 também disparam sozinhas — não precisa rodar o workflow de merge.
 
