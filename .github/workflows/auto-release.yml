@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Criar tag e Release v${{ steps.version.outputs.version }}
+    name: Criar tag e Release
     runs-on: ubuntu-latest
 
     steps:
