@@ -357,6 +357,29 @@ function init_gerencianet_assinaturas_pix()
 		}
 
 		/**
+		 * DateTime::add() transborda para o mês seguinte quando o dia de origem
+		 * não existe no mês de destino: um mês a partir de 31 de agosto vira 1º de
+		 * outubro e a assinatura pula setembro inteiro. Fixa no último dia do mês
+		 * de destino, que é o que se espera de uma cobrança mensal.
+		 */
+		private function add_months(DateTime $date, $months)
+		{
+			$result = clone $date;
+			$day    = (int) $result->format('j');
+
+			$result->modify('first day of this month');
+			$result->modify('+' . (int) $months . ' month');
+
+			$result->setDate(
+				(int) $result->format('Y'),
+				(int) $result->format('n'),
+				min($day, (int) $result->format('t'))
+			);
+
+			return $result;
+		}
+
+		/**
 		 * Registra uma etapa da Jornada 3 com o contexto necessário para comparar
 		 * o que a loja enviou com o que a API respondeu. Sem isso o log guarda
 		 * apenas a recusa da Efí, que descreve o problema sem dizer qual corpo
@@ -534,22 +557,22 @@ function init_gerencianet_assinaturas_pix()
 			$hoje = new DateTime();
 			switch ($interval) {
 				case 1:
-					$hoje->add(new DateInterval('P1M'));
+					$hoje = $this->add_months($hoje, 1);
 					break;
 				case 2:
-					$hoje->add(new DateInterval('P2M'));
+					$hoje = $this->add_months($hoje, 2);
 					break;
 				case 3:
-					$hoje->add(new DateInterval('P3M'));
+					$hoje = $this->add_months($hoje, 3);
 					break;
 				case 4:
-					$hoje->add(new DateInterval('P4M'));
+					$hoje = $this->add_months($hoje, 4);
 					break;
 				case 6:
-					$hoje->add(new DateInterval('P6M'));
+					$hoje = $this->add_months($hoje, 6);
 					break;
 				case 12:
-					$hoje->add(new DateInterval('P1Y'));
+					$hoje = $this->add_months($hoje, 12);
 					break;
 				default:
 					// Se não reconhecido, mantém hoje
@@ -564,30 +587,29 @@ function init_gerencianet_assinaturas_pix()
 				// Calcula a data final conforme a periodicidade e repetições
 				switch ($interval) {
 					case 1:
-						$intervalSpec = 'P' . ($repeats - 1) . 'M';
+						$mesesTotais = $repeats - 1;
 						break;
 					case 2:
-						$intervalSpec = 'P' . (2 * ($repeats - 1)) . 'M';
+						$mesesTotais = 2 * ($repeats - 1);
 						break;
 					case 3:
-						$intervalSpec = 'P' . (3 * ($repeats - 1)) . 'M';
+						$mesesTotais = 3 * ($repeats - 1);
 						break;
 					case 4:
-						$intervalSpec = 'P' . (4 * ($repeats - 1)) . 'M';
+						$mesesTotais = 4 * ($repeats - 1);
 						break;
 					case 6:
-						$intervalSpec = 'P' . (6 * ($repeats - 1)) . 'M';
+						$mesesTotais = 6 * ($repeats - 1);
 						break;
 					case 12:
-						$intervalSpec = 'P' . ($repeats - 1) . 'Y';
+						$mesesTotais = 12 * ($repeats - 1);
 						break;
 					default:
-						$intervalSpec = null;
+						$mesesTotais = null;
 						break;
 				}
-				if ($intervalSpec) {
-					$date = new DateTime();
-					$date->add(new DateInterval($intervalSpec));
+				if (null !== $mesesTotais) {
+					$date = $this->add_months(new DateTime(), $mesesTotais);
 
 					// Adiciona o possível atraso total: (repeats - 1) * 7 dias
 					$atrasoTotalDias = 7 * ($repeats - 1);
