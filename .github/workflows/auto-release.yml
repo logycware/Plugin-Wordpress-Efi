@@ -1,0 +1,100 @@
+name: Publicar Release ao mesclar no master
+
+# Quando um PR entra no master com versao nova no plugin, cria a tag e o
+# Release no GitHub. O workflow release-asset.yml reage ao evento
+# release: published e anexa gerencianet-oficial.zip.
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Criar tag e Release v${{ steps.version.outputs.version }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ler a versão do plugin
+        id: version
+        run: |
+          plugin_version="$(sed -n "s/^define( *'GERENCIANET_OFICIAL_VERSION', *'\([^']*\)'.*/\1/p" gerencianet-oficial.php)"
+          header_version="$(sed -n 's/^ \* Version: *\(.*\)$/\1/p' gerencianet-oficial.php | tr -d '[:space:]')"
+          stable_tag="$(sed -n 's/^Stable tag: *\(.*\)$/\1/p' readme.txt | tr -d '[:space:]')"
+
+          if [ -z "$plugin_version" ]; then
+            echo "Não foi possível ler GERENCIANET_OFICIAL_VERSION." >&2
+            exit 1
+          fi
+
+          echo "Versão do plugin: $plugin_version"
+          echo "Version (header): $header_version"
+          echo "Stable tag: $stable_tag"
+
+          if [ "$plugin_version" != "$header_version" ] || [ "$plugin_version" != "$stable_tag" ]; then
+            echo "::error::Version, GERENCIANET_OFICIAL_VERSION e Stable tag precisam ser iguais antes de publicar um Release."
+            exit 1
+          fi
+
+          echo "version=$plugin_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$plugin_version" >> "$GITHUB_OUTPUT"
+
+      - name: Pular se o Release já existir
+        id: exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag já publicado; nada a fazer."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "A tag $tag já existe, mas não há Release; criando apenas o Release."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "tag_only=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "tag_only=false" >> "$GITHUB_OUTPUT"
+
+      - name: Criar tag e Release
+        if: steps.exists.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+          version='${{ steps.version.outputs.version }}'
+
+          if [ "${{ steps.exists.outputs.tag_only }}" = "true" ]; then
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --generate-notes \
+              --target "${{ github.sha }}"
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --generate-notes \
+              --target "${{ github.sha }}"
+          fi
+
+          echo "Release $tag criado a partir de ${{ github.sha }}."
+          echo "O workflow Publicar ZIP do plugin vai anexar gerencianet-oficial.zip em seguida."
