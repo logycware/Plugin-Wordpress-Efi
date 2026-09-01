@@ -196,13 +196,13 @@ function init_gerencianet_assinaturas_cartao() {
 					</div>
 				</div>
 				<div class="form-row form-row-wide"><label><?php echo __( 'Número do Cartão', Gerencianet_I18n::getTextDomain() ); ?><span class="required">*</span></label>
-					<input id="gn_cartao_number" class="input-text" inputmode="numeric" name="gn_cartao_number" type="text" autocomplete="off" style="width: 100%;">
+					<input id="gn_cartao_number" class="input-text" inputmode="numeric" type="text" autocomplete="off" style="width: 100%;"><!-- Os campos do cartão ficam sem "name" de propósito: só o JS da Efí os lê, pelo id, para gerar o payment_token no navegador. Com "name" o WooCommerce os incluiria no POST do checkout e o número e o CVV passariam pelo servidor da loja. -->
 				</div>
 				<div class="form-row form-row-first"><label>CVV<span class="required">*</span></label>
-					<input id="gn_cartao_cvv" class="input-text" inputmode="numeric" name="gn_cartao_cvv" type="text" autocomplete="off">
+					<input id="gn_cartao_cvv" class="input-text" inputmode="numeric" type="text" autocomplete="off">
 				</div>
 				<div class="form-row form-row-last"><label><?php echo __( 'Expiração (MM/AA)', Gerencianet_I18n::getTextDomain() ); ?><span class="required">*</span></label>
-					<input id="gn_cartao_expiration" class="input-text" inputmode="numeric" placeholder="__/__" name="gn_cartao_expiration" type="text" autocomplete="off">
+					<input id="gn_cartao_expiration" class="input-text" inputmode="numeric" placeholder="__/__" type="text" autocomplete="off">
 				</div>
 				<input id="gn_payment_token" name="gn_payment_token" type="hidden">
 				<input id="gn_payment_total" name="gn_payment_total" type="hidden" value="<?php echo WC()->cart->total; ?>">
