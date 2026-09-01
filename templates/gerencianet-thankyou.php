@@ -289,6 +289,29 @@ switch ( $payment_method ) {
 			<p>Aguarde maiores informações no seu email.</p>
 		</div>';
 		break;
+	case GERENCIANET_ASSINATURAS_CARTAO_LINK_ID:
+		$linkStatus  = Gerencianet_Hpos::get_meta( $order_id, '_gn_subs_card_link_charge_status', true );
+		$linkUrl     = Gerencianet_Hpos::get_meta( $order_id, '_gn_subs_card_link_url', true );
+		$subsStatus  = Gerencianet_Hpos::get_meta( $order_id, '_gn_subs_card_link_status', true );
+
+		if ( 'paid' === $linkStatus || $order->is_paid() ) {
+			echo '<div id="approval-screen" class="result-screen">
+					<h3>Assinatura autorizada!</h3>
+					<p>Obrigado. Sua assinatura foi confirmada e as próximas cobranças serão debitadas automaticamente no cartão cadastrado na Efí.</p>
+				</div>';
+		} elseif ( 'unpaid' === $linkStatus || 'canceled' === $linkStatus || 'canceled' === $subsStatus ) {
+			echo '<div id="denial-screen" class="result-screen">
+					<h3>Assinatura não concluída</h3>
+					<p>Não foi possível autorizar a assinatura. Entre em contato com a loja ou tente novamente pela área "Meus pedidos".</p>
+				</div>';
+		} elseif ( $linkUrl ) {
+			echo '<div class="result-screen">
+					<h3>Falta autorizar sua assinatura</h3>
+					<p>Abra o link abaixo para cadastrar o cartão no ambiente seguro da Efí e confirmar a recorrência.</p>
+					<p><a href="' . esc_url( $linkUrl ) . '" class="button gnbtn">Autorizar assinatura com cartão</a></p>
+				</div>';
+		}
+		break;
 	default:
 		// code...
 		break;

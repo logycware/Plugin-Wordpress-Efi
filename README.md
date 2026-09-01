@@ -75,7 +75,40 @@ Os registros ficam em `efi-cartao-link.log`, disponível no botão "Baixar Logs"
 
 ### Limitações
 
-Este gateway cobre pagamento avulso no cartão. Assinaturas continuam pelos gateways de recorrência já existentes, e o Pix (inclusive o Pix Automático) não é afetado: o link de pagamento pertence à API Cobranças e não oferece Pix Automático.
+Este gateway cobre pagamento avulso no cartão. Assinaturas recorrentes usam os gateways de recorrência (transparente, boleto, Pix Automático ou link de assinatura descrito abaixo). O Pix (inclusive o Pix Automático) não é afetado: o link de pagamento pertence à API Cobranças e não oferece Pix Automático.
+
+## Assinatura via cartão por link de pagamento
+
+Para produtos recorrentes, este fork oferece o gateway **"Efí - Assinaturas via Cartão (link de pagamento)"**, que usa `POST /v1/plan` seguido de `POST /v1/plan/:id/subscription/one-step/link`.
+
+### Como funciona
+
+1. O cliente finaliza o checkout na loja sem informar dados de cartão.
+2. O plugin cria um plano na Efí com o intervalo e as repetições configurados no produto WooCommerce.
+3. A Efí devolve um `payment_url` onde o cliente cadastra o cartão e autoriza a recorrência.
+4. Depois da autorização, a Efí debita automaticamente conforme o plano; cada cobrança chega pela `notification_url`, como nos demais gateways de assinatura da API Cobranças.
+
+### Benefícios
+
+- Nenhum dado de cartão passa pelo WordPress (escopo PCI reduzido).
+- Não exige Identificador de Conta (`payee_code`), porque não há tokenização no navegador da loja.
+- Compatível com valor dinâmico/doação: o total do pedido WooCommerce é a fonte de verdade do valor enviado à Efí.
+
+### Configuração
+
+1. Ative "Habilitar Assinaturas via Cartão por link de pagamento" e informe Client ID e Client Secret (produção e homologação).
+2. Ajuste a validade do link (padrão de 3 dias) e, se quiser, uma mensagem de 3 a 80 caracteres exibida na tela da Efí.
+3. Escolha se o cliente vai direto para a tela da Efí ou passa antes pela página de pedido recebido, onde encontra o botão "Autorizar assinatura com cartão".
+
+O gateway só aparece quando o carrinho contém um produto com recorrência habilitada (`_habilitar_recorrencia = yes`).
+
+### Limitações
+
+- Período de teste (`trial_days`) não está disponível neste fluxo por link; use o gateway transparente de assinatura se precisar disso.
+- O cancelamento segue o mesmo fluxo dos demais gateways Cobranças: cancelar o pedido na loja dispara `PUT /v1/subscription/:id/cancel` na Efí.
+- O histórico de cobranças recorrentes reutiliza o painel existente, alimentado pelas notificações gravadas em `_notification_subscription`.
+
+Os registros ficam em `efi-assinaturas-cartao-link.log`.
 
 ## Atualização automática deste fork
 

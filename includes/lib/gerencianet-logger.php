@@ -40,6 +40,9 @@ if ( ! function_exists( 'gn_log' ) ) {
 			case GERENCIANET_ASSINATURAS_CARTAO_ID:
 				$fileName = 'efi-assinaturas-cartao.log';
 				break;
+			case GERENCIANET_ASSINATURAS_CARTAO_LINK_ID:
+				$fileName = 'efi-assinaturas-cartao-link.log';
+				break;
 			case GERENCIANET_ASSINATURAS_PIX_ID:
 				$fileName = 'efi-assinaturas-pix.log';
 				break;
