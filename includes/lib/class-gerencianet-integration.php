@@ -672,6 +672,66 @@ class Gerencianet_Integration
 		}
 	}
 
+	/**
+	 * Cria o plano de assinatura e devolve o link da tela hospedada da Efi
+	 * para o cliente cadastrar o cartao. A recorrencia passa a ser gerenciada
+	 * pela Efi depois que o pagador autoriza na pagina dela.
+	 */
+	public function create_subscription_card_link($plan_id, $order_id, $items, $shipping, $notification_url, $email, $expirationDate, $message = '', $paymentMethod = GERENCIANET_ASSINATURAS_CARTAO_LINK_ID)
+	{
+		$params = array(
+			'id' => $plan_id,
+		);
+
+		$settings = array(
+			'payment_method'           => 'credit_card',
+			'expire_at'                => $expirationDate,
+			'request_delivery_address' => false,
+		);
+
+		if ('' !== $message) {
+			$settings['message'] = $message;
+		}
+
+		$body = array(
+			'items'    => $items,
+			'metadata' => array(
+				'custom_id'        => strval($order_id),
+				'notification_url' => $notification_url,
+			),
+			'settings' => $settings,
+		);
+
+		if ('' !== $email) {
+			$body['customer'] = array('email' => $email);
+		}
+
+		if ($shipping) {
+			$body['shippings'] = $shipping;
+		}
+
+		try {
+			$api      = new Gerencianet($this->get_credentials($paymentMethod));
+			$response = $api->createOneStepSubscriptionLink($params, $body);
+
+			return self::result_api($paymentMethod, $response, true);
+		} catch (GerencianetException $e) {
+			$errorResponse = array(
+				'code'    => $e->getCode(),
+				'error'   => $e->error,
+				'message' => $e->errorDescription,
+			);
+
+			return self::result_api($paymentMethod, $errorResponse, false);
+		} catch (Exception $e) {
+			$errorResponse = array(
+				'message' => $e->getMessage(),
+			);
+
+			return self::result_api($paymentMethod, $errorResponse, false);
+		}
+	}
+
 	public function card_retry($order_id, $payment_token, $paymentMethod)
 	{
 		$body = Gerencianet_Hpos::get_meta($order_id, '_gn_retry_body');

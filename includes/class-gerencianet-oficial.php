@@ -13,6 +13,7 @@ require_once __DIR__ . '/payment-methods/subscriptions/class-gerencianet-planos.
 require_once __DIR__ . '/payment-methods/subscriptions/class-gerencianet-assinaturas.php';
 require_once __DIR__ . '/payment-methods/subscriptions/class-wc-gerencianet-assinaturas-boleto.php';
 require_once __DIR__ . '/payment-methods/subscriptions/class-wc-gerencianet-assinaturas-cartao.php';
+require_once __DIR__ . '/payment-methods/subscriptions/class-wc-gerencianet-assinaturas-cartao-link.php';
 require_once __DIR__ . '/payment-methods/subscriptions/class-wc-gerencianet-assinaturas-pix.php';
 require_once __DIR__ . '/utils/class-gerencianet-hpos.php';
 require_once __DIR__ . '/utils/class-efi-cypher.php';
@@ -94,6 +95,7 @@ add_action('plugins_loaded', 'init_gerencianet_cartao_link');
 		add_action('plugins_loaded', 'init_gerencianet_pix');
 		add_action('plugins_loaded', 'init_gerencianet_open_finance');
 		add_action('plugins_loaded', 'init_gerencianet_assinaturas_cartao');
+		add_action('plugins_loaded', 'init_gerencianet_assinaturas_cartao_link');
 		add_action('plugins_loaded', 'init_gerencianet_assinaturas_boleto');
 		add_action('plugins_loaded', 'init_gerencianet_assinaturas_pix');
 
@@ -249,6 +251,7 @@ add_action('plugins_loaded', 'init_gerencianet_cartao_link');
 		$gateways[] = GERENCIANET_OPEN_FINANCE_ID;
 		$gateways[] = GERENCIANET_ASSINATURAS_BOLETO_ID;
 		$gateways[] = GERENCIANET_ASSINATURAS_CARTAO_ID;
+		$gateways[] = GERENCIANET_ASSINATURAS_CARTAO_LINK_ID;
 		$gateways[] = GERENCIANET_ASSINATURAS_PIX_ID;
 		return $gateways;
 	}
@@ -345,13 +348,14 @@ add_action('plugins_loaded', 'init_gerencianet_cartao_link');
 
 			if ($found) {
 				foreach ($available_gateways as $key) {
-					if (($key->id != GERENCIANET_ASSINATURAS_CARTAO_ID) && ($key->id != GERENCIANET_ASSINATURAS_BOLETO_ID) && ($key->id != GERENCIANET_ASSINATURAS_PIX_ID)) {
+					if (($key->id != GERENCIANET_ASSINATURAS_CARTAO_ID) && ($key->id != GERENCIANET_ASSINATURAS_CARTAO_LINK_ID) && ($key->id != GERENCIANET_ASSINATURAS_BOLETO_ID) && ($key->id != GERENCIANET_ASSINATURAS_PIX_ID)) {
 						// Se o gateway não for Assinaturas, remove-o
 						unset($available_gateways[$key->id]);
 					}
 				}
 			} else {
 				unset($available_gateways[GERENCIANET_ASSINATURAS_CARTAO_ID]);
+				unset($available_gateways[GERENCIANET_ASSINATURAS_CARTAO_LINK_ID]);
 				unset($available_gateways[GERENCIANET_ASSINATURAS_BOLETO_ID]);
 				unset($available_gateways[GERENCIANET_ASSINATURAS_PIX_ID]);
 			}
@@ -442,7 +446,7 @@ add_action('plugins_loaded', 'init_gerencianet_cartao_link');
 		}
 
 		// Verifica se é o nosso gateway específico
-		if (!isset($_GET['section']) || !in_array($_GET['section'], ['wc_gerencianet_pix', 'wc_gerencianet_boleto', 'wc_gerencianet_cartao', 'wc_gerencianet_cartao_link', 'wc_gerencianet_open_finance', 'wc_gerencianet_assinaturas_boleto', 'wc_gerencianet_assinaturas_cartao', 'wc_gerencianet_assinaturas_pix'])) {
+		if (!isset($_GET['section']) || !in_array($_GET['section'], ['wc_gerencianet_pix', 'wc_gerencianet_boleto', 'wc_gerencianet_cartao', 'wc_gerencianet_cartao_link', 'wc_gerencianet_open_finance', 'wc_gerencianet_assinaturas_boleto', 'wc_gerencianet_assinaturas_cartao', 'wc_gerencianet_assinaturas_cartao_link', 'wc_gerencianet_assinaturas_pix'])) {
 			return;
 		}
 

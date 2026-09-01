@@ -28,7 +28,7 @@ class Gerencianet_Assinaturas
         $subscription_id = Gerencianet_Hpos::get_meta($subs_id, '_id_da_assinatura', true);
         $payment_method = Gerencianet_Hpos::get_meta($subs_id, '_subs_payment_method', true);
 
-        if (isset($payment_method) && ($payment_method == GERENCIANET_ASSINATURAS_BOLETO_ID || $payment_method == GERENCIANET_ASSINATURAS_CARTAO_ID)) {
+        if (isset($payment_method) && ($payment_method == GERENCIANET_ASSINATURAS_BOLETO_ID || $payment_method == GERENCIANET_ASSINATURAS_CARTAO_ID || $payment_method == GERENCIANET_ASSINATURAS_CARTAO_LINK_ID)) {
             if ($old_status == 'cancelled') {
                 $order->set_status('cancelled');
                 $order->save();
@@ -44,7 +44,7 @@ class Gerencianet_Assinaturas
         $subscription_id = Gerencianet_Hpos::get_meta($subs_id, '_id_da_assinatura', true);
         $payment_method = Gerencianet_Hpos::get_meta($subs_id, '_subs_payment_method', true);
 
-        if (isset($payment_method) && ($payment_method == GERENCIANET_ASSINATURAS_BOLETO_ID || $payment_method == GERENCIANET_ASSINATURAS_CARTAO_ID)) {
+        if (isset($payment_method) && ($payment_method == GERENCIANET_ASSINATURAS_BOLETO_ID || $payment_method == GERENCIANET_ASSINATURAS_CARTAO_ID || $payment_method == GERENCIANET_ASSINATURAS_CARTAO_LINK_ID)) {
             $gerencianetSDK = new Gerencianet_Integration();
             $response = $gerencianetSDK->get_subscription($payment_method, $subscription_id);
 
