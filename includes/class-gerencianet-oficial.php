@@ -6,6 +6,7 @@ require_once __DIR__ . '/lib/class-gerencianet-integration.php';
 require_once __DIR__ . '/lib/class-gerencianet-validate.php';
 require_once __DIR__ . '/payment-methods/class-wc-gerencianet-boleto.php';
 require_once __DIR__ . '/payment-methods/class-wc-gerencianet-cartao.php';
+require_once __DIR__ . '/payment-methods/class-wc-gerencianet-cartao-link.php';
 require_once __DIR__ . '/payment-methods/class-wc-gerencianet-pix.php';
 require_once __DIR__ . '/payment-methods/class-wc-gerencianet-open-finance.php';
 require_once __DIR__ . '/payment-methods/subscriptions/class-gerencianet-planos.php';
@@ -89,6 +90,7 @@ class Gerencianet_Oficial
 		// Gerencianet Boleto Actions and Filters
 		add_action('plugins_loaded', 'init_gerencianet_boleto');
 		add_action('plugins_loaded', 'init_gerencianet_cartao');
+add_action('plugins_loaded', 'init_gerencianet_cartao_link');
 		add_action('plugins_loaded', 'init_gerencianet_pix');
 		add_action('plugins_loaded', 'init_gerencianet_open_finance');
 		add_action('plugins_loaded', 'init_gerencianet_assinaturas_cartao');
@@ -242,6 +244,7 @@ class Gerencianet_Oficial
 	{
 		$gateways[] = GERENCIANET_BOLETO_ID;
 		$gateways[] = GERENCIANET_CARTAO_ID;
+		$gateways[] = GERENCIANET_CARTAO_LINK_ID;
 		$gateways[] = GERENCIANET_PIX_ID;
 		$gateways[] = GERENCIANET_OPEN_FINANCE_ID;
 		$gateways[] = GERENCIANET_ASSINATURAS_BOLETO_ID;
@@ -278,8 +281,10 @@ class Gerencianet_Oficial
 
 		// Verificações de métodos de pagamento existentes
 		$cardEnabled = '';
+		$cardLinkEnabled = '';
 		$boletoSettings = maybe_unserialize(get_option('woocommerce_' . GERENCIANET_BOLETO_ID . '_settings'));
 		$cardSettings = maybe_unserialize(get_option('woocommerce_' . GERENCIANET_CARTAO_ID . '_settings'));
+		$cardLinkSettings = maybe_unserialize(get_option('woocommerce_' . GERENCIANET_CARTAO_LINK_ID . '_settings'));
 
 		if (isset($boletoSettings['gn_billet_banking'])) {
 			$boletoEnabled = $boletoSettings['gn_billet_banking'];
@@ -287,6 +292,10 @@ class Gerencianet_Oficial
 
 		if (isset($cardSettings['gn_credit_card'])) {
 			$cardEnabled = $cardSettings['gn_credit_card'];
+		}
+
+		if (isset($cardLinkSettings['gn_card_link'])) {
+			$cardLinkEnabled = $cardLinkSettings['gn_card_link'];
 		}
 
 		
@@ -305,9 +314,19 @@ class Gerencianet_Oficial
 
 		if (isset(WC()->cart->subtotal) && ((WC()->cart->subtotal + $shippingCost) < 3) && isset($cardEnabled)) {
 			wc_clear_notices();
-			if ($cardEnabled == 'yes') {
+
+			// O piso de R$ 3,00 da Efí para cartão vale tanto no checkout
+			// transparente quanto na tela de pagamento por link.
+			if ($cardEnabled == 'yes' || $cardLinkEnabled == 'yes') {
 				wc_add_notice('O pagamento via Cartão de Crédito só está disponível em pedidos acima de R$3,00', 'notice');
+			}
+
+			if ($cardEnabled == 'yes') {
 				unset($available_gateways[GERENCIANET_CARTAO_ID]);
+			}
+
+			if ($cardLinkEnabled == 'yes') {
+				unset($available_gateways[GERENCIANET_CARTAO_LINK_ID]);
 			}
 		}
 
@@ -385,6 +404,7 @@ class Gerencianet_Oficial
 			'wc_gerencianet_boleto' => 'efi-boletos.log',
 			'wc_gerencianet_pix' => 'efi-pix.log',
 			'wc_gerencianet_cartao' => 'efi-cartao.log',
+			'wc_gerencianet_cartao_link' => 'efi-cartao-link.log',
 			'wc_gerencianet_open_finance' => 'efi-open-finance.log',
 			'wc_gerencianet_assinaturas_boleto' => 'efi-assinaturas-boleto.log',
 			'wc_gerencianet_assinaturas_cartao' => 'efi-assinaturas-cartao.log',
@@ -422,7 +442,7 @@ class Gerencianet_Oficial
 		}
 
 		// Verifica se é o nosso gateway específico
-		if (!isset($_GET['section']) || !in_array($_GET['section'], ['wc_gerencianet_pix', 'wc_gerencianet_boleto', 'wc_gerencianet_cartao', 'wc_gerencianet_open_finance', 'wc_gerencianet_assinaturas_boleto', 'wc_gerencianet_assinaturas_cartao', 'wc_gerencianet_assinaturas_pix'])) {
+		if (!isset($_GET['section']) || !in_array($_GET['section'], ['wc_gerencianet_pix', 'wc_gerencianet_boleto', 'wc_gerencianet_cartao', 'wc_gerencianet_cartao_link', 'wc_gerencianet_open_finance', 'wc_gerencianet_assinaturas_boleto', 'wc_gerencianet_assinaturas_cartao', 'wc_gerencianet_assinaturas_pix'])) {
 			return;
 		}
 

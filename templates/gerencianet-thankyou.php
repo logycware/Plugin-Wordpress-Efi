@@ -13,9 +13,13 @@
 $order          = new WC_Order( $order_id );
 $payment_method = $order->get_payment_method();
 
+// Esses dois valores servem à retentativa do checkout transparente, mas o
+// template roda para todo pedido: quem só usa outro gateway pode nunca ter
+// salvado as configurações do cartão transparente.
 $wcSettings = maybe_unserialize( get_option( 'woocommerce_' . GERENCIANET_CARTAO_ID . '_settings' ) );
-$isSandbox  = $wcSettings['gn_sandbox'] == 'yes' ? true : false;
-$payeeCode  = $wcSettings['gn_payee_code'];
+$wcSettings = is_array( $wcSettings ) ? $wcSettings : array();
+$isSandbox  = isset( $wcSettings['gn_sandbox'] ) && $wcSettings['gn_sandbox'] == 'yes';
+$payeeCode  = isset( $wcSettings['gn_payee_code'] ) ? $wcSettings['gn_payee_code'] : '';
 $body = Gerencianet_Hpos::get_meta( $order_id, '_gn_retry_body');
 
 
@@ -50,6 +54,30 @@ switch ( $payment_method ) {
 			</script>
 			<?php
 		} 
+		break;
+	case GERENCIANET_CARTAO_LINK_ID:
+		$linkStatus = Gerencianet_Hpos::get_meta( $order_id, '_gn_card_link_status', true );
+		$linkUrl    = Gerencianet_Hpos::get_meta( $order_id, '_gn_card_link_url', true );
+
+		if ( 'paid' === $linkStatus ) {
+			echo '<div id="approval-screen" class="result-screen">
+					<h3>Pagamento aprovado!</h3>
+					<p>Obrigado pela sua compra. Seu pedido já está sendo processado.</p>
+				</div>';
+		} elseif ( 'unpaid' === $linkStatus || 'canceled' === $linkStatus ) {
+			echo '<div id="denial-screen" class="result-screen">
+					<h3>Pagamento não concluído</h3>
+					<p>Infelizmente o pagamento não foi aprovado. Você pode tentar novamente pela área "Meus pedidos" da loja, onde um novo link de pagamento será gerado.</p>
+				</div>';
+		} elseif ( $linkUrl ) {
+			// Com o redirecionamento automático o cliente já foi para a tela da
+			// Efí, mas ele pode voltar para cá antes de pagar.
+			echo '<div class="result-screen">
+					<h3>Falta pouco para concluir seu pedido</h3>
+					<p>Informe os dados do cartão no ambiente seguro da Efí para finalizar o pagamento.</p>
+					<p><a href="' . esc_url( $linkUrl ) . '" class="button gnbtn">Pagar com cartão de crédito</a></p>
+				</div>';
+		}
 		break;
 	case GERENCIANET_BOLETO_ID:
 		echo '<iframe  src=' . esc_url( Gerencianet_Hpos::get_meta( $order_id, '_gn_link_responsive', true ) ) . " width='900' height='400'></iframe>";

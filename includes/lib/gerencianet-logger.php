@@ -25,6 +25,9 @@ if ( ! function_exists( 'gn_log' ) ) {
 			case GERENCIANET_CARTAO_ID:
 				$fileName = 'efi-cartao.log';
 				break;
+			case GERENCIANET_CARTAO_LINK_ID:
+				$fileName = 'efi-cartao-link.log';
+				break;
 			case GERENCIANET_PIX_ID:
 				$fileName = 'efi-pix.log';
 				break;
