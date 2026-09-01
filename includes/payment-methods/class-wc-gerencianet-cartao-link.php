@@ -155,7 +155,7 @@ function init_gerencianet_cartao_link() {
 				'gn_card_link_message'          => array(
 					'title'       => __( 'Mensagem ao cliente', Gerencianet_I18n::getTextDomain() ),
 					'type'        => 'text',
-					'description' => __( 'Mensagem opcional exibida na tela de pagamento da Efí. Limite de 80 caracteres.', Gerencianet_I18n::getTextDomain() ),
+					'description' => __( 'Mensagem opcional exibida na tela de pagamento da Efí. A Efí exige de 3 a 80 caracteres, então mensagens menores são ignoradas.', Gerencianet_I18n::getTextDomain() ),
 					'desc_tip'    => false,
 					'default'     => '',
 				),
@@ -301,6 +301,18 @@ function init_gerencianet_cartao_link() {
 			return array( $items, $shippings );
 		}
 
+		/**
+		 * A Efí aceita a mensagem com 3 a 80 caracteres. Enviar menos que isso
+		 * faz a criação do link inteiro ser recusada por validação, então uma
+		 * mensagem curta demais é melhor omitida do que enviada.
+		 */
+		private function get_customer_message() {
+			$message = $this->clip( $this->get_option( 'gn_card_link_message' ), 80 );
+			$length  = function_exists( 'mb_strlen' ) ? mb_strlen( $message ) : strlen( $message );
+
+			return $length >= 3 ? $message : '';
+		}
+
 		private function get_expiration_date() {
 			$days = intval( $this->get_option( 'gn_card_link_number_days' ) );
 
@@ -349,7 +361,7 @@ function init_gerencianet_cartao_link() {
 
 				$notification_url = strtolower( $woocommerce->api_request_url( GERENCIANET_CARTAO_LINK_ID ) );
 				$expirationDate   = $this->get_expiration_date();
-				$message          = $this->clip( $this->get_option( 'gn_card_link_message' ), 80 );
+				$message          = $this->get_customer_message();
 				$email            = sanitize_email( $order->get_billing_email() );
 
 				$this->log_debug(
@@ -360,6 +372,7 @@ function init_gerencianet_cartao_link() {
 						'items'           => $items,
 						'shippings'       => $shippings,
 						'expire_at'       => $expirationDate,
+						'message'         => '' === $message ? '(omitida)' : $message,
 						'email'           => $this->mask_email( $email ),
 					)
 				);
