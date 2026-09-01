@@ -1,13 +1,14 @@
 name: Publicar Release ao mesclar no master
 
-# Quando um PR entra no master com versao nova no plugin, cria a tag e o
-# Release no GitHub. O workflow release-asset.yml reage ao evento
-# release: published e anexa gerencianet-oficial.zip.
+# Push no master com versao nova -> tag + Release + gerencianet-oficial.zip.
+# O GITHUB_TOKEN nao dispara outros workflows ao criar o Release, entao o ZIP
+# e gerado neste mesmo workflow.
 
 on:
   push:
     branches:
       - master
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,7 +19,7 @@ concurrency:
 
 jobs:
   publish:
-    name: Criar tag e Release
+    name: Publicar Release e ZIP
     runs-on: ubuntu-latest
 
     steps:
@@ -51,50 +52,70 @@ jobs:
           echo "version=$plugin_version" >> "$GITHUB_OUTPUT"
           echo "tag=v$plugin_version" >> "$GITHUB_OUTPUT"
 
-      - name: Pular se o Release já existir
+      - name: Verificar Release e asset existentes
         id: exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag='${{ steps.version.outputs.tag }}'
+          has_release=false
+          has_zip=false
 
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $tag já publicado; nada a fazer."
+            has_release=true
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx 'gerencianet-oficial.zip'; then
+              has_zip=true
+            fi
+          fi
+
+          echo "Release $tag: release=$has_release zip=$has_zip"
+
+          if [ "$has_release" = true ] && [ "$has_zip" = true ]; then
+            echo "Release e ZIP já publicados; nada a fazer."
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if git rev-parse "$tag" >/dev/null 2>&1; then
-            echo "A tag $tag já existe, mas não há Release; criando apenas o Release."
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "tag_only=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "tag_only=false" >> "$GITHUB_OUTPUT"
+          echo "has_release=$has_release" >> "$GITHUB_OUTPUT"
+          echo "has_zip=$has_zip" >> "$GITHUB_OUTPUT"
 
       - name: Criar tag e Release
+        if: steps.exists.outputs.skip != 'true' && steps.exists.outputs.has_release != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$tag" \
+            --generate-notes \
+            --target "${{ github.sha }}"
+
+          echo "Release $tag criado a partir de ${{ github.sha }}."
+
+      - name: Gerar o ZIP com raiz gerencianet-oficial/
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          rm -rf build
+          mkdir -p build/gerencianet-oficial
+
+          git archive HEAD | tar -x -C build/gerencianet-oficial
+          rm -rf build/gerencianet-oficial/.github
+          rm -f build/gerencianet-oficial/.gitignore
+
+          test -f build/gerencianet-oficial/gerencianet-oficial.php
+
+          cd build
+          zip -rq gerencianet-oficial.zip gerencianet-oficial
+          unzip -l gerencianet-oficial.zip | head -n 20
+
+      - name: Anexar gerencianet-oficial.zip ao Release
         if: steps.exists.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag='${{ steps.version.outputs.tag }}'
-          version='${{ steps.version.outputs.version }}'
-
-          if [ "${{ steps.exists.outputs.tag_only }}" = "true" ]; then
-            gh release create "$tag" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$tag" \
-              --generate-notes \
-              --target "${{ github.sha }}"
-          else
-            gh release create "$tag" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$tag" \
-              --generate-notes \
-              --target "${{ github.sha }}"
-          fi
-
-          echo "Release $tag criado a partir de ${{ github.sha }}."
-          echo "O workflow Publicar ZIP do plugin vai anexar gerencianet-oficial.zip em seguida."
+          gh release upload "$tag" build/gerencianet-oficial.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY"
